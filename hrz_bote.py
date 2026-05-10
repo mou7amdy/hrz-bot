@@ -42,6 +42,7 @@ BSCSCAN      = f"https://bscscan.com/token/{HRZ_CONTRACT}"
 WEBSITE      = "https://hormuz-hrz.netlify.app"
 COINSNIPER   = "https://coinsniper.net"
 TWITTER      = "https://x.com/armou224"
+CHANNEL_ID   = -1003992608217
 BOT_USERNAME = "@Hurmoz_bot"
 
 # ── TIMING ────────────────────────────────────────────────────────────────────
@@ -1304,6 +1305,7 @@ async def cmd_schedule(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         (vote_reminder,   VOTE_INTERVAL,    3600, f"vote_{name}"),
         (daily_report,    REPORT_INTERVAL,  7200, f"report_{name}"),
         (ath_check_tick,  ATH_CHECK,        30,   f"ath_{name}"),
+        (post_to_channel, POST_INTERVAL,    15,   f"channel_{name}"),
     ]
 
     for func, interval, first, job_name in jobs:
@@ -1411,3 +1413,23 @@ async def job_watchdog(context):
     jobs = context.job_queue.jobs()
     if not jobs:
         print("⚠️ JobQueue empty — restarting scheduler")
+
+# Auto-post to channel
+async def post_to_channel(ctx: ContextTypes.DEFAULT_TYPE):
+    global _post_index
+    post_type = POST_TYPES[_post_index % len(POST_TYPES)]
+    _post_index += 1
+    post = generate_post(post_type)
+    try:
+        await ctx.bot.send_message(
+            chat_id=CHANNEL_ID,
+            text=post,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("💱 Buy HRZ", url=PANCAKE_BUY),
+                InlineKeyboardButton("📊 Chart",   url=DEXSCREENER),
+            ]])
+        )
+    except Exception as e:
+        logger.error(f"Channel post error: {e}")
