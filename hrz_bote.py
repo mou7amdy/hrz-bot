@@ -32,8 +32,8 @@ from telegram.ext import (
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
-TOKEN      = os.getenv("TOKEN",      "YOUR_BOT_TOKEN_HERE")
-GEMINI_KEY = os.getenv("GEMINI_KEY", "YOUR_GEMINI_KEY_HERE")
+TOKEN      = os.getenv("TOKEN",      "8669492245:AAGhwIR4zwF1wOIkhO2qBV56jqQDUhUMlIA")
+GEMINI_KEY = os.getenv("GEMINI_KEY", "AIzaSyD48ydx3IYz46qV1jRHymgGHH0EPHIjwnU")
 
 HRZ_CONTRACT = "0x4E788d423d90A15504455b4FF746B9C1D9951A82"
 PANCAKE_BUY  = f"https://pancakeswap.finance/swap?outputCurrency={HRZ_CONTRACT}"
