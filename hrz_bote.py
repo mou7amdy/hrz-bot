@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-🌊 Hormuz (HRZ) Official Telegram Bot v6 — Fixed Edition
+🌊 Hormuz (HRZ) Official Telegram Bot v8 — Ultimate Edition
+2500+ lines | Gemini AI | Auto-posting | Giveaway | Anti-Raid | Price Alerts | Sentiment | Referral
 """
 
 import logging
@@ -10,44 +11,75 @@ import os
 import re
 import json
 import urllib.request
+import urllib.parse
+import hashlib
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup,
+    ChatPermissions, BotCommand
+)
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
 )
+from telegram.constants import ParseMode
 
-# ── CONFIG ────────────────────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════
+# ── CONFIGURATION
+# ════════════════════════════════════════════════════════════════════
 
 TOKEN      = os.getenv("TOKEN",      "8669492245:AAGhwIR4zwF1wOIkhO2qBV56jqQDUhUMlIA")
 GEMINI_KEY = os.getenv("GEMINI_KEY", "AIzaSyD48ydx3IYz46qV1jRHymgGHH0EPHIjwnU")
 
-HRZ_CONTRACT = "0x4E788d423d90A15504455b4FF746B9C1D9951A82"
+HRZ_CONTRACT  = "0x4E788d423d90A15504455b4FF746B9C1D9951A82"
+HRZ_NAME      = "Hormuz"
+HRZ_SYMBOL    = "HRZ"
+HRZ_SUPPLY    = 1_000_000_000
+HRZ_BUY_TAX  = 0
+HRZ_SELL_TAX = 3
+HRZ_NETWORK  = "BNB Chain"
+HRZ_LAUNCH   = "May 2026"
+
 PANCAKE_BUY  = f"https://pancakeswap.finance/swap?outputCurrency={HRZ_CONTRACT}"
 DEXSCREENER  = f"https://dexscreener.com/bsc/{HRZ_CONTRACT}"
 BSCSCAN      = f"https://bscscan.com/token/{HRZ_CONTRACT}"
+PINKLOCK     = "https://pinksale.finance/pinklock"
 WEBSITE      = "https://hormuz-hrz.netlify.app"
 COINSNIPER   = "https://coinsniper.net"
+GEMFINDER    = "https://gemfinder.cc"
+COINHUNT     = "https://coinhunt.cc"
+DEXTOOLS     = f"https://www.dextools.io/app/en/bnb/pair-explorer/{HRZ_CONTRACT}"
 TWITTER      = "https://x.com/armou224"
-CHANNEL_ID   = -1003992608217
+TELEGRAM_GRP = "https://t.me/HormuzHRZ"
 BOT_USERNAME = "@Hurmoz_bot"
 
-POST_INTERVAL    = 30 * 60
-QUIZ_INTERVAL    = 60 * 60
-BUY_BOT_INTERVAL = 30
-VOTE_INTERVAL    = 24 * 3600
-REPORT_INTERVAL  = 24 * 3600
-ATH_CHECK        = 5 * 60
+CHANNEL_ID   = -1003992608217
 
-PRICE_CACHE_TTL     = 60
-WHALE_THRESHOLD_BNB = 0.5
-MIN_BUY_BNB         = 0.01
+POST_INTERVAL        = 20 * 60
+QUIZ_INTERVAL        = 60 * 60
+BUY_BOT_INTERVAL     = 30
+VOTE_INTERVAL        = 24 * 3600
+REPORT_INTERVAL      = 24 * 3600
+ATH_CHECK            = 5 * 60
+SENTIMENT_INTERVAL   = 6 * 3600
+LEADERBOARD_INTERVAL = 12 * 3600
+PRICE_CACHE_TTL      = 60
+WHALE_THRESHOLD_USD  = 100
+WHALE_THRESHOLD_BNB  = 0.5
+MIN_BUY_BNB          = 0.005
+AI_REPLY_COOLDOWN    = 120
+MAX_WARNS_BEFORE_BAN = 3
+MUTE_DEFAULT_MINS    = 60
+ANTI_RAID_THRESHOLD  = 8
+ANTI_RAID_WINDOW     = 30
 
-XP_MESSAGE  = 1
-XP_COMMAND  = 2
-XP_VOTE     = 5
-XP_QUIZ_WIN = 20
+XP_MESSAGE   = 1
+XP_COMMAND   = 2
+XP_VOTE      = 5
+XP_QUIZ_WIN  = 20
+XP_REFERRAL  = 10
+XP_DAILY     = 3
 
 LEVELS = {
     0:    "🐚 Newcomer",
@@ -57,26 +89,222 @@ LEVELS = {
     600:  "🔱 Hormuz Guardian",
     1000: "👑 Strait Master",
     2000: "⚡ HRZ Legend",
-}
-
-BADGES = {
-    "early_holder":   "🏅 Early Holder",
-    "whale":          "🐋 Whale",
-    "community_hero": "🦸 Community Hero",
-    "quiz_master":    "🧠 Quiz Master",
-    "voter":          "🗳️ Loyal Voter",
-    "diamond_hands":  "💎 Diamond Hands",
+    5000: "🌟 Hormuz God",
 }
 
 SPAM_PATTERNS = [
-    r"https?://(?!hormuz-hrz\.netlify\.app|pancakeswap\.finance|dexscreener\.com|bscscan\.com|coinsniper\.net|t\.me/Hurmoz_bot|x\.com/armou224)",
-    r"t\.me/(?!Hurmoz_bot)",
+    r"t\.me/(?!HormuzHRZ|Hurmoz_bot)",
+    r"(?:earn|make)\s+\$?\d+\s+(?:daily|per day)",
+    r"(?:dm|message)\s+me\s+(?:for|to)",
+    r"(?:free|giveaway)\s+(?:crypto|bnb|eth|usdt)(?!\s+giveaway\s+hrz)",
+    r"(?:pump|moon)\s+guarantee",
+    r"airdrop.*claim(?!.*hrz)",
 ]
 
 BANNED_WORDS = [
-    "scam", "rug", "fake", "honeypot", "rugpull",
-    "send me", "dm me", "guaranteed profit", "100x guaranteed"
+    "scam", "rug", "rugpull", "fake", "honeypot",
+    "send me", "dm me for profit", "guaranteed returns",
+    "100x guaranteed", "ponzi", "pyramid",
 ]
+
+CRYPTO_KEYWORDS = [
+    "hrz", "hormuz", "buy", "sell", "price", "moon", "pump",
+    "hodl", "hold", "bullish", "bearish", "dex", "bnb", "pancake",
+    "liquidity", "contract", "wallet", "token", "crypto", "defi",
+    "chart", "volume", "market cap", "ath", "dip", "gem",
+]
+
+POST_TYPES = [
+    "price_update", "hype_call", "dex_stats", "strait_fact",
+    "community_question", "buy_reminder", "liquidity_info",
+    "comparison", "motivation", "chart_update", "whale_alert_teaser",
+    "tokenomics", "roadmap_teaser", "why_hrz", "fun_fact",
+    "market_insight", "holder_appreciation", "fomo_post",
+    "educational", "meme_text",
+]
+
+QUIZ_QUESTIONS = [
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nWhat % of global oil passes through the Strait of Hormuz?\n\nA) 10%  B) 20%  C) 30%  D) 40%",
+        "answers": ["20", "b", "20%"],
+        "correct": "B) 20%",
+        "fact": "The Strait of Hormuz controls 20% of global oil! 🛢️",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nWhat is HRZ total supply?\n\nA) 100M  B) 500M  C) 1B  D) 10B",
+        "answers": ["1000000000", "c", "1 billion", "1b"],
+        "correct": "C) 1 Billion",
+        "fact": "HRZ total supply: exactly 1,000,000,000! 🌊",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nHRZ buy tax is?\n\nA) 1%  B) 3%  C) 5%  D) 0%",
+        "answers": ["0", "d", "0%", "zero"],
+        "correct": "D) 0%",
+        "fact": "HRZ has ZERO buy tax! Buy freely! ✅",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nWhich blockchain is HRZ on?\n\nA) ETH  B) SOL  C) BNB Chain  D) Polygon",
+        "answers": ["bnb", "c", "bnb chain", "bsc", "binance"],
+        "correct": "C) BNB Chain",
+        "fact": "HRZ lives on BNB Chain for speed and low fees! ⚡",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nHRZ liquidity is locked for?\n\nA) 3mo  B) 6mo  C) 1yr  D) 2yr",
+        "answers": ["1", "c", "1 year", "one year", "12 months"],
+        "correct": "C) 1 Year",
+        "fact": "HRZ liquidity locked 1 full year on PinkLock! 🔒",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nWhere to buy HRZ?\n\nA) Uniswap  B) SushiSwap  C) PancakeSwap  D) Raydium",
+        "answers": ["pancakeswap", "c", "pancake"],
+        "correct": "C) PancakeSwap",
+        "fact": "Buy HRZ on PancakeSwap V2 on BNB Chain! 🥞",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nThe Strait of Hormuz connects?\n\nA) Red Sea & Med  B) Persian Gulf & Gulf of Oman  C) Black Sea  D) Pacific",
+        "answers": ["b", "persian", "gulf of oman", "persian gulf"],
+        "correct": "B) Persian Gulf & Gulf of Oman",
+        "fact": "Hormuz connects Persian Gulf to Gulf of Oman! 🌊",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nHRZ sell tax is?\n\nA) 1%  B) 3%  C) 5%  D) 10%",
+        "answers": ["3", "b", "3%"],
+        "correct": "B) 3%",
+        "fact": "3% sell tax goes to dev wallet for development! 💰",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +25 XP!</b>\n\nWhat country controls the Strait of Hormuz?\n\nA) Saudi Arabia  B) UAE  C) Iran & Oman  D) Kuwait",
+        "answers": ["c", "iran", "oman", "iran and oman"],
+        "correct": "C) Iran & Oman",
+        "fact": "Iran and Oman share control of the Strait of Hormuz! 🗺️",
+        "xp": 25
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +25 XP!</b>\n\nHow wide is the Strait at its narrowest?\n\nA) 21km  B) 39km  C) 55km  D) 100km",
+        "answers": ["b", "39", "39km"],
+        "correct": "B) 39km",
+        "fact": "The Strait is only 39km wide at its narrowest point! 🌊",
+        "xp": 25
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nWhat does HRZ stand for?\n\nA) High Risk Zone  B) Hormuz  C) Horizon  D) Hard Reserve",
+        "answers": ["b", "hormuz"],
+        "correct": "B) Hormuz",
+        "fact": "HRZ = Hormuz, the world's most strategic strait! ⚔️",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nHRZ contract is verified on?\n\nA) Etherscan  B) BscScan  C) Solscan  D) Polygonscan",
+        "answers": ["b", "bscscan", "bsc"],
+        "correct": "B) BscScan",
+        "fact": "HRZ contract is fully verified on BscScan! ✅",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +30 XP!</b>\n\nHow many oil tankers pass through Hormuz daily?\n\nA) 5-10  B) 17-20  C) 30-40  D) 50+",
+        "answers": ["b", "17", "20", "17-20"],
+        "correct": "B) 17-20 tankers per day",
+        "fact": "17-20 massive oil tankers pass through Hormuz every day! 🛢️",
+        "xp": 30
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nHRZ liquidity is locked on?\n\nA) Unicrypt  B) Team Finance  C) PinkLock  D) DxSale",
+        "answers": ["c", "pinklock", "pink", "pinksale"],
+        "correct": "C) PinkLock",
+        "fact": "HRZ liquidity is secured on PinkLock! 🔒",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +25 XP!</b>\n\nHRZ Twitter account is?\n\nA) @HormuzToken  B) @HRZ_BNB  C) @armou224  D) @HormuzHRZ",
+        "answers": ["c", "armou224", "@armou224"],
+        "correct": "C) @armou224",
+        "fact": "Follow HRZ on Twitter: @armou224! 🐦",
+        "xp": 25
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +25 XP!</b>\n\nHRZ was launched in?\n\nA) Jan 2026  B) March 2026  C) May 2026  D) July 2026",
+        "answers": ["c", "may", "may 2026"],
+        "correct": "C) May 2026",
+        "fact": "HRZ launched in May 2026 — you're still very early! 🚀",
+        "xp": 25
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +30 XP!</b>\n\nWhat % of world's LNG passes through Hormuz?\n\nA) 10%  B) 20%  C) 30%  D) 40%",
+        "answers": ["c", "30", "30%"],
+        "correct": "C) ~30%",
+        "fact": "About 30% of world's LNG passes through Hormuz! 💨",
+        "xp": 30
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nHRZ website is?\n\nA) hormuz.com  B) hrz.io  C) hormuz-hrz.netlify.app  D) hrz.xyz",
+        "answers": ["c", "netlify", "hormuz-hrz", "hormuz-hrz.netlify.app"],
+        "correct": "C) hormuz-hrz.netlify.app",
+        "fact": "Visit hormuz-hrz.netlify.app for all HRZ info! 🌐",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nHRZ is listed on which DEX screener?\n\nA) PooCoin  B) DexScreener  C) DexGuru  D) GeckoTerminal",
+        "answers": ["b", "dexscreener", "dex screener"],
+        "correct": "B) DexScreener",
+        "fact": "Track HRZ live on DexScreener! 📊",
+        "xp": 20
+    },
+    {
+        "q": "🧠 <b>Quiz Time! +20 XP!</b>\n\nHRZ Telegram group is?\n\nA) @HRZ_Official  B) @HormuzToken  C) @HormuzHRZ  D) @HRZ_BNB",
+        "answers": ["c", "hormuzhrz", "@hormuzhrz"],
+        "correct": "C) @HormuzHRZ",
+        "fact": "Join HRZ Telegram: @HormuzHRZ! 💬",
+        "xp": 20
+    },
+]
+
+STRAIT_FACTS = [
+    "The Strait of Hormuz is only 39km wide at its narrowest, yet controls 20% of global oil trade! 🌊",
+    "Approximately 17-20 fully loaded supertankers pass through the Strait every single day! 🛢️",
+    "The Strait of Hormuz connects the Persian Gulf to the Gulf of Oman and the Arabian Sea. 🗺️",
+    "If the Strait of Hormuz were closed, global oil prices would skyrocket within days! 📈",
+    "About 30% of the world's LNG also passes through the Strait! 💨",
+    "Over $1 trillion worth of oil and gas passes through the Strait every single year! 💰",
+    "The Strait has two 3.2km-wide shipping lanes — one inbound and one outbound! 🚢",
+    "The Strait of Hormuz is considered the world's most important oil chokepoint! 🏆",
+    "Qatar exports its entire natural gas production through the Strait of Hormuz! 💎",
+    "Just like the Strait controls the world's oil, $HRZ aims to control crypto wealth flow! 🚀",
+]
+
+MOTIVATIONS = [
+    "💎 The Strait controls the oil. $HRZ controls the gains. HODL tight! 🌊",
+    "🚀 Every empire started small. HRZ is just beginning its conquest! ⚔️",
+    "🌊 Like water through the strait — nothing can stop $HRZ's flow! 💪",
+    "💰 Early birds catch the biggest gains. You're still very early on $HRZ! 🐦",
+    "⚓ Sailors who stay the course reach the greatest treasures. HODL $HRZ! 🏆",
+    "🔱 The guardian of the strait rewards those who believe! Keep HODLING! 👑",
+    "💎 Diamond hands were forged in the fires of doubt. Stay strong $HRZ army! 🔥",
+    "🌟 Legends aren't born, they're made. You're making history with $HRZ! ⭐",
+    "🐋 Whales don't panic sell. Be a whale, think long term! 🌊",
+    "⚡ The storm before the moon. Every dip is an opportunity! 🚀",
+]
+
+FOMO_MESSAGES = [
+    "👀 While you're reading this, smart money is buying $HRZ!",
+    "⏰ The clock is ticking. Early stage won't last forever!",
+    "💸 Every minute you wait is a minute others are accumulating $HRZ!",
+    "🚀 Rockets don't wait for late passengers. $HRZ is on the launchpad!",
+    "🏆 Champions make moves when others hesitate. Are you a champion?",
+    "💎 The best time to buy was at launch. The second best time is NOW!",
+    "🎯 Don't be the person who says 'I should have bought earlier'!",
+]
+
+# ════════════════════════════════════════════════════════════════════
+# ── LOGGING
+# ════════════════════════════════════════════════════════════════════
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -84,244 +312,500 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-_price_cache      = None
-_price_cache_time = 0.0
-_last_seen_tx     = ""
-_faq_store        = {}
-_xp_store         = defaultdict(int)
-_badge_store      = defaultdict(set)
-_warn_store       = defaultdict(int)
-_ath_store        = {"price": 0.0, "date": ""}
-_ath_alerted      = 0.0
-_lockdown         = False
-_quiz_active      = {}
-_post_index       = 0
-_reply_cooldown   = {}
+# ════════════════════════════════════════════════════════════════════
+# ── STATE STORAGE
+# ════════════════════════════════════════════════════════════════════
 
-POST_TYPES = [
-    "price_update", "hype_call", "dex_stats", "strait_fact",
-    "community_question", "buy_reminder", "liquidity_info",
-    "comparison", "motivation", "chart_update",
-]
+_price_cache:        dict | None = None
+_price_cache_time:   float       = 0.0
+_last_seen_tx:       str         = ""
+_xp_store:           dict        = defaultdict(int)
+_badge_store:        dict        = defaultdict(set)
+_warn_store:         dict        = defaultdict(int)
+_ath_store:          dict        = {"price": 0.0, "date": ""}
+_ath_alerted:        float       = 0.0
+_lockdown:           bool        = False
+_quiz_active:        dict        = {}
+_post_index:         int         = 0
+_reply_cooldown:     dict        = {}
+_daily_claim:        dict        = {}
+_total_posts:        int         = 0
+_bot_start_time:     float       = time.time()
 
-QUIZ_QUESTIONS = [
-    {
-        "q": "🧠 <b>Quiz Time! +20 XP for first correct answer!</b>\n\nWhat percentage of global oil passes through the Strait of Hormuz?\n\nA) 10%  B) 20%  C) 30%  D) 40%",
-        "answers": ["20", "b", "20%"],
-        "correct": "B) 20%",
-        "fact": "The Strait of Hormuz controls 20% of the world's oil supply! 🛢️"
-    },
-    {
-        "q": "🧠 <b>Quiz Time! +20 XP for first correct answer!</b>\n\nWhat is HRZ total supply?\n\nA) 100M  B) 500M  C) 1 Billion  D) 10 Billion",
-        "answers": ["1000000000", "c", "1 billion", "1b"],
-        "correct": "C) 1 Billion",
-        "fact": "HRZ total supply is exactly 1,000,000,000 tokens! 🌊"
-    },
-    {
-        "q": "🧠 <b>Quiz Time! +20 XP for first correct answer!</b>\n\nWhat is the HRZ buy tax?\n\nA) 1%  B) 3%  C) 5%  D) 0%",
-        "answers": ["0", "d", "0%", "zero"],
-        "correct": "D) 0%",
-        "fact": "HRZ has ZERO buy tax! ✅"
-    },
-    {
-        "q": "🧠 <b>Quiz Time! +20 XP for first correct answer!</b>\n\nWhich blockchain is HRZ on?\n\nA) Ethereum  B) Solana  C) BNB Chain  D) Polygon",
-        "answers": ["bnb", "c", "bnb chain", "bsc"],
-        "correct": "C) BNB Chain",
-        "fact": "HRZ runs on BNB Chain! ⚡"
-    },
-    {
-        "q": "🧠 <b>Quiz Time! +20 XP for first correct answer!</b>\n\nHow long is HRZ liquidity locked?\n\nA) 3 months  B) 6 months  C) 1 year  D) 2 years",
-        "answers": ["1", "c", "1 year", "one year"],
-        "correct": "C) 1 Year",
-        "fact": "HRZ liquidity is locked for 1 full year! 🔒"
-    },
-]
+# ── Giveaway System
+_giveaway_active:    dict        = {}   # chat_id -> {prize_xp, entries: set, end_time, msg_id}
 
-# ── HELPERS ───────────────────────────────────────────────────────────────────
+# ── Anti-Raid System
+_join_timestamps:    dict        = defaultdict(list)  # chat_id -> [timestamps]
+_raid_mode:          dict        = defaultdict(bool)  # chat_id -> bool
+_raid_mode_until:    dict        = defaultdict(float) # chat_id -> timestamp
 
-def http_get(url, timeout=8):
+# ── Price Alerts System
+_price_alerts:       dict        = defaultdict(list)  # user_id -> [{target, direction, chat_id}]
+_alert_check_prices: dict        = {}  # last known price per chat
+
+# ── Sentiment Voting
+_sentiment_votes:    dict        = {}  # chat_id -> {bullish: set, bearish: set, date, msg_id}
+
+# ── Referral System
+_referral_codes:     dict        = {}  # code -> user_id
+_referrals_made:     dict        = defaultdict(list)  # user_id -> [referred_user_ids]
+_referral_used:      dict        = {}  # user_id -> referrer_id
+
+# ════════════════════════════════════════════════════════════════════
+# ── HTTP HELPERS
+# ════════════════════════════════════════════════════════════════════
+
+def http_get(url: str, timeout: int = 8) -> dict | None:
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "Mozilla/5.0 HRZBot/8.0"}
+        )
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read())
     except Exception as e:
-        logger.error(f"GET {url[:60]}: {e}")
+        logger.error(f"GET {url[:70]}: {e}")
         return None
 
-def fetch_hrz_price(force=False):
-    global _price_cache, _price_cache_time
+def http_post(url: str, data: bytes, headers: dict = None, timeout: int = 15) -> dict | None:
+    try:
+        h = {"Content-Type": "application/json"}
+        if headers:
+            h.update(headers)
+        req = urllib.request.Request(url, data=data, headers=h)
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read())
+    except Exception as e:
+        logger.error(f"POST {url[:70]}: {e}")
+        return None
+
+# ════════════════════════════════════════════════════════════════════
+# ── PRICE & MARKET DATA
+# ════════════════════════════════════════════════════════════════════
+
+def fetch_hrz_price(force: bool = False) -> dict | None:
+    global _price_cache, _price_cache_time, _ath_store
     if not force and _price_cache and (time.time() - _price_cache_time) < PRICE_CACHE_TTL:
         return _price_cache
     data = http_get(f"https://api.dexscreener.com/tokens/v1/bsc/{HRZ_CONTRACT}")
-    if data:
-        pairs = data if isinstance(data, list) else data.get("pairs", [])
-        if pairs:
-            p = pairs[0]
-            result = {
-                "price_usd":  p.get("priceUsd", "0"),
-                "price_bnb":  p.get("priceNative", "0"),
-                "change_1h":  p.get("priceChange", {}).get("h1", 0),
-                "change_6h":  p.get("priceChange", {}).get("h6", 0),
-                "change_24h": p.get("priceChange", {}).get("h24", 0),
-                "volume_24h": p.get("volume", {}).get("h24", 0),
-                "volume_6h":  p.get("volume", {}).get("h6", 0),
-                "liquidity":  p.get("liquidity", {}).get("usd", 0),
-                "market_cap": p.get("marketCap", 0),
-                "fdv":        p.get("fdv", 0),
-                "txns_buys":  p.get("txns", {}).get("h24", {}).get("buys", 0),
-                "txns_sells": p.get("txns", {}).get("h24", {}).get("sells", 0),
-            }
-            global _ath_store
-            current = float(result["price_usd"])
-            if current > _ath_store["price"]:
-                _ath_store = {
-                    "price": current,
-                    "date": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-                }
-            _price_cache = result
-            _price_cache_time = time.time()
-            return result
-    return _price_cache
+    if not data:
+        return _price_cache
+    pairs = data if isinstance(data, list) else data.get("pairs", [])
+    if not pairs:
+        return _price_cache
+    p = pairs[0]
+    result = {
+        "price_usd":     p.get("priceUsd", "0"),
+        "price_bnb":     p.get("priceNative", "0"),
+        "change_5m":     p.get("priceChange", {}).get("m5", 0),
+        "change_1h":     p.get("priceChange", {}).get("h1", 0),
+        "change_6h":     p.get("priceChange", {}).get("h6", 0),
+        "change_24h":    p.get("priceChange", {}).get("h24", 0),
+        "volume_5m":     p.get("volume", {}).get("m5", 0),
+        "volume_1h":     p.get("volume", {}).get("h1", 0),
+        "volume_24h":    p.get("volume", {}).get("h24", 0),
+        "liquidity":     p.get("liquidity", {}).get("usd", 0),
+        "market_cap":    p.get("marketCap", 0),
+        "fdv":           p.get("fdv", 0),
+        "txns_5m_buys":  p.get("txns", {}).get("m5", {}).get("buys", 0),
+        "txns_5m_sells": p.get("txns", {}).get("m5", {}).get("sells", 0),
+        "txns_buys":     p.get("txns", {}).get("h24", {}).get("buys", 0),
+        "txns_sells":    p.get("txns", {}).get("h24", {}).get("sells", 0),
+        "pair_address":  p.get("pairAddress", ""),
+    }
+    current = float(result["price_usd"] or 0)
+    if current > _ath_store["price"]:
+        _ath_store = {
+            "price": current,
+            "date": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        }
+    _price_cache = result
+    _price_cache_time = time.time()
+    return result
 
-def fetch_fear_greed():
+def fetch_fear_greed() -> dict:
     data = http_get("https://api.alternative.me/fng/?limit=1")
     if data and data.get("data"):
         d = data["data"][0]
-        return {"value": d.get("value", "?"), "label": d.get("value_classification", "?")}
+        return {
+            "value": d.get("value", "?"),
+            "label": d.get("value_classification", "Unknown"),
+        }
     return {"value": "?", "label": "Unknown"}
 
-def ask_gemini(prompt, max_tokens=400):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
+def fetch_bnb_price() -> float:
+    data = http_get("https://api.binance.com/api/v3/ticker/price?symbol=BNBUSDT")
+    if data and "price" in data:
+        return float(data["price"])
+    return 0.0
+
+def fetch_latest_buys() -> list:
+    data = http_get(
+        f"https://api.bscscan.com/api?module=account&action=tokentx"
+        f"&contractaddress={HRZ_CONTRACT}&sort=desc&offset=10&page=1"
+    )
+    if data and isinstance(data.get("result"), list):
+        return data["result"]
+    return []
+
+def get_market_trend(d: dict) -> str:
+    if not d:
+        return "neutral"
+    c24 = float(d.get("change_24h", 0) or 0)
+    if c24 > 10:   return "🔥 bullish"
+    elif c24 > 0:  return "📈 slightly bullish"
+    elif c24 > -10:return "📉 slightly bearish"
+    else:          return "🔴 bearish"
+
+# ════════════════════════════════════════════════════════════════════
+# ── GEMINI AI
+# ════════════════════════════════════════════════════════════════════
+
+def ask_gemini(prompt: str, max_tokens: int = 400, temperature: float = 0.85) -> str:
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
+    )
     system = (
         f"You are the official English-only AI assistant for Hormuz (HRZ) crypto token on BNB Chain. "
-        f"Contract: {HRZ_CONTRACT} | Buy: {PANCAKE_BUY} | Chart: {DEXSCREENER} | Website: {WEBSITE} | "
-        f"Total Supply: 1,000,000,000 HRZ | Buy Tax: 0% | Sell Tax: 3% | "
-        f"Liquidity: Locked 1 Year | Contract: Verified on BscScan | Network: BNB Chain | "
-        f"Launched: May 2026 | Inspired by the Strait of Hormuz — controlling 20% of global oil. "
-        f"ALWAYS respond in English only. Be enthusiastic and helpful. "
-        f"Keep responses short (max 4 sentences). End with a relevant emoji."
+        f"Token: {HRZ_NAME} ({HRZ_SYMBOL}) | Contract: {HRZ_CONTRACT} | "
+        f"Buy: {PANCAKE_BUY} | Chart: {DEXSCREENER} | Website: {WEBSITE} | "
+        f"Twitter: {TWITTER} | Total Supply: {HRZ_SUPPLY:,} | "
+        f"Buy Tax: {HRZ_BUY_TAX}% | Sell Tax: {HRZ_SELL_TAX}% | "
+        f"Liquidity: Locked 1 Year on PinkLock | Network: {HRZ_NETWORK} | "
+        f"Launched: {HRZ_LAUNCH}. "
+        f"RULES: ALWAYS respond in English only. Be enthusiastic and helpful. "
+        f"Max 4 sentences unless asked for more. Add DYOR on financial questions. "
+        f"Never give price predictions. Always mention buy link when relevant."
     )
     payload = json.dumps({
         "contents": [{"parts": [{"text": f"{system}\n\nUser: {prompt}"}]}],
-        "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.85}
+        "generationConfig": {
+            "maxOutputTokens": max_tokens,
+            "temperature": temperature,
+            "topP": 0.9,
+        },
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT",  "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH",  "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+        ]
     }).encode()
-    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            data = json.loads(r.read())
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception as e:
-        logger.error(f"Gemini error: {e}")
-        return "⚠️ AI temporarily unavailable. Try again shortly! 🌊"
+    result = http_post(url, payload)
+    if result:
+        try:
+            return result["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError):
+            pass
+    return "⚠️ AI temporarily unavailable. Try /ask again shortly! 🌊"
 
-def generate_post(post_type):
+def generate_post(post_type: str) -> str:
     d = fetch_hrz_price()
     fg = fetch_fear_greed()
-    ctx = ""
+    bnb = fetch_bnb_price()
+    trend = get_market_trend(d)
+
+    ctx = "No live data."
     if d:
-        c24 = float(d['change_24h']) if d['change_24h'] else 0
-        ctx = (
-            f"Price: ${float(d['price_usd']):.10f} | 24h: {c24:+.2f}% | "
-            f"Vol: ${float(d['volume_24h']):,.2f} | Liq: ${float(d['liquidity']):,.2f} | "
-            f"Buys/Sells: {d['txns_buys']}/{d['txns_sells']} | Fear&Greed: {fg['value']}"
+        c24  = float(d["change_24h"] or 0)
+        vol  = float(d["volume_24h"] or 0)
+        liq  = float(d["liquidity"]  or 0)
+        price= float(d["price_usd"]  or 0)
+        ctx  = (
+            f"Price: ${price:.10f} | 24h: {c24:+.2f}% | "
+            f"Vol 24h: ${vol:,.2f} | Liq: ${liq:,.2f} | "
+            f"Buys/Sells: {d['txns_buys']}/{d['txns_sells']} | "
+            f"FDV: ${float(d['fdv'] or 0):,.2f} | "
+            f"F&G: {fg['value']} ({fg['label']}) | "
+            f"Trend: {trend} | BNB: ${bnb:.2f}"
         )
+
+    fomo       = random.choice(FOMO_MESSAGES)
+    motivation = random.choice(MOTIVATIONS)
+    fact       = random.choice(STRAIT_FACTS)
+    ath        = _ath_store
+
     prompts = {
-        "price_update": f"Write an exciting Telegram post about HRZ price. Include price, 24h change, volume. Add buy and chart links. Max 6 lines. End with #HRZ #Hormuz #BNBChain. Context: {ctx}",
-        "hype_call": f"Write a viral FOMO Telegram post about HRZ. Mention early stage, verified contract, locked liquidity. Include contract and PancakeSwap link. Max 6 lines. Context: {ctx}",
-        "dex_stats": f"Write a Telegram post showing HRZ DEX stats. Include volume, liquidity, buys vs sells. Add DexScreener link. Max 6 lines. Context: {ctx}",
-        "strait_fact": "Write a fascinating fact about the Strait of Hormuz and connect it to HRZ token. Educational and engaging. Max 5 lines.",
-        "community_question": "Write an engaging question for the HRZ Telegram community to boost interaction. Add A) B) C) options. Max 5 lines.",
-        "buy_reminder": f"Write a 'why buy HRZ now' post. Highlight: 0% buy tax, verified, locked liquidity, early stage. Include PancakeSwap link. Max 6 lines. Context: {ctx}",
-        "liquidity_info": f"Write a trust-building post about HRZ locked liquidity. Explain what it means for investors. Max 5 lines. Context: {ctx}",
-        "comparison": "Write a post comparing HRZ to other meme coins. Highlight: real Strait of Hormuz inspiration, 0% buy tax, locked liquidity. Max 6 lines.",
-        "motivation": f"Write a motivational post for HRZ holders. Keep them excited. Reference Strait of Hormuz. Max 5 lines. Context: {ctx}",
-        "chart_update": f"Write an exciting chart analysis for HRZ. Mention price movement, volume, what it means. Include DexScreener link. Max 6 lines. Context: {ctx}",
+        "price_update": (
+            f"Write an exciting Telegram crypto post about HRZ live price. "
+            f"Include price with emojis, 24h change, volume, trend. "
+            f"Add buy link {PANCAKE_BUY} and chart {DEXSCREENER}. "
+            f"End with #HRZ #Hormuz #BNBChain. Use HTML bold for numbers. Max 8 lines. Data: {ctx}"
+        ),
+        "hype_call": (
+            f"Write a viral FOMO Telegram post about HRZ. Mention: early stage, 0% buy tax, "
+            f"1yr locked liq, verified contract. Include buy link. FOMO line: '{fomo}'. Max 8 lines. Data: {ctx}"
+        ),
+        "dex_stats": (
+            f"Write a professional DEX stats Telegram post for HRZ. "
+            f"Include volume breakdown, liquidity health, buy/sell ratio. "
+            f"Mention DexScreener {DEXSCREENER}. Sound like a market analyst. Max 8 lines. Data: {ctx}"
+        ),
+        "strait_fact": (
+            f"Write educational Telegram post starting with: '{fact}' "
+            f"Connect brilliantly to $HRZ mission. Educational AND exciting. Max 6 lines."
+        ),
+        "community_question": (
+            f"Write an engaging community question for HRZ Telegram with A/B/C/D options. "
+            f"Fun question about HRZ or Hormuz Strait. Mention +XP reward. Max 6 lines."
+        ),
+        "buy_reminder": (
+            f"Write compelling 'why buy HRZ now' post. Highlight: 0% buy tax, verified, locked liq. "
+            f"Step-by-step: 1) Get BNB 2) Open PancakeSwap 3) Paste contract. Include buy link. Max 8 lines. Data: {ctx}"
+        ),
+        "liquidity_info": (
+            f"Write a trust-building post about HRZ locked liquidity. "
+            f"Explain safety benefits. Include PinkLock proof {PINKLOCK}. Max 6 lines."
+        ),
+        "comparison": (
+            f"Write a post comparing HRZ to typical meme coins. "
+            f"HRZ advantages: real inspiration, 0% buy tax, 1yr locked liq, verified, active community. Max 7 lines."
+        ),
+        "motivation": (
+            f"Write powerful motivational post for HRZ holders. Use: '{motivation}' "
+            f"Reference Strait of Hormuz theme. Encourage HODLing. Max 6 lines."
+        ),
+        "chart_update": (
+            f"Write exciting chart analysis style post for HRZ. "
+            f"Mention price movement, volume trend, buy/sell pressure. "
+            f"Use chart emojis 📈📉🕯️. Include DexScreener link. Sound professional. Max 8 lines. Data: {ctx}"
+        ),
+        "whale_alert_teaser": (
+            f"Write mysterious 'whales are watching' post about HRZ. "
+            f"Tease that big money might be accumulating. Reference ATH: ${ath['price']:.10f}. Create FOMO. Max 6 lines."
+        ),
+        "tokenomics": (
+            f"Write clear Telegram post explaining HRZ tokenomics: 1B supply, 0% buy, 3% sell, locked liq. "
+            f"Explain why investor-friendly. Include contract and buy link. Max 7 lines."
+        ),
+        "roadmap_teaser": (
+            f"Write exciting roadmap teaser for HRZ. "
+            f"Hype potential milestones: CoinGecko, CMC, CEX listing, partnerships. Aspirational but realistic. Max 6 lines."
+        ),
+        "why_hrz": (
+            f"Write convincing 'Why HRZ?' post. "
+            f"Answer: real inspiration (Strait of Hormuz), strong community, verified, locked, 0% buy tax. Max 7 lines."
+        ),
+        "fun_fact": (
+            f"Write fun crypto trivia post connected to HRZ. "
+            f"Start with amazing Strait of Hormuz fact. Connect cleverly to $HRZ potential. Shareable. Max 6 lines."
+        ),
+        "market_insight": (
+            f"Write professional market insight post. Reference Fear & Greed: {fg['value']} ({fg['label']}). "
+            f"Explain what current sentiment means for $HRZ. Sound like a strategist. Max 7 lines. Data: {ctx}"
+        ),
+        "holder_appreciation": (
+            f"Write warm appreciation post for HRZ holders. "
+            f"Thank early holders, call them 'HRZ Army', mention diamond hands, encourage community growth. Max 6 lines."
+        ),
+        "fomo_post": (
+            f"Write extreme FOMO post about HRZ. Use: '{fomo}' "
+            f"Mention ATH ${ath['price']:.10f}. Create urgency to buy NOW. Max 7 lines. Data: {ctx}"
+        ),
+        "educational": (
+            f"Write educational post teaching newcomers about HRZ. "
+            f"Cover: what it is, how to buy (PancakeSwap), why safe (verified, locked). "
+            f"Include contract {HRZ_CONTRACT} and step-by-step guide. Friendly for beginners. Max 8 lines."
+        ),
+        "meme_text": (
+            f"Write funny but bullish meme-style post about HRZ. "
+            f"Use crypto humor, emojis, diamond hands references. Professional yet funny. Include buy link. Max 5 lines."
+        ),
     }
     prompt = prompts.get(post_type, prompts["hype_call"])
-    return ask_gemini(prompt, max_tokens=250)
+    return ask_gemini(prompt, max_tokens=300)
 
-def get_level(xp):
+# ════════════════════════════════════════════════════════════════════
+# ── XP & LEVEL SYSTEM
+# ════════════════════════════════════════════════════════════════════
+
+def get_level(xp: int) -> str:
     level = LEVELS[0]
     for threshold, name in sorted(LEVELS.items()):
         if xp >= threshold:
             level = name
     return level
 
-def add_xp(user_id, amount):
+def get_next_level(xp: int):
+    for threshold, name in sorted(LEVELS.items()):
+        if threshold > xp:
+            return threshold, name
+    return None
+
+def add_xp(user_id: int, amount: int) -> bool:
+    old_level = get_level(_xp_store[user_id])
     _xp_store[user_id] += amount
+    new_level = get_level(_xp_store[user_id])
+    return old_level != new_level
 
-def add_badge(user_id, badge):
-    _badge_store[user_id].add(badge)
+def get_user_rank(user_id: int) -> int:
+    sorted_users = sorted(_xp_store.items(), key=lambda x: x[1], reverse=True)
+    for i, (uid, _) in enumerate(sorted_users, 1):
+        if uid == user_id:
+            return i
+    return len(sorted_users) + 1
 
-def is_spam(text):
+def can_claim_daily(user_id: int) -> bool:
+    today = datetime.now(timezone.utc).date().isoformat()
+    return _daily_claim.get(user_id) != today
+
+def claim_daily(user_id: int):
+    today = datetime.now(timezone.utc).date().isoformat()
+    _daily_claim[user_id] = today
+
+# ════════════════════════════════════════════════════════════════════
+# ── SPAM & SAFETY
+# ════════════════════════════════════════════════════════════════════
+
+def is_spam(text: str) -> bool:
     return any(re.search(p, text, re.IGNORECASE) for p in SPAM_PATTERNS)
 
-def has_banned_words(text):
-    return any(word in text.lower() for word in BANNED_WORDS)
+def has_banned_words(text: str) -> bool:
+    return any(w in text.lower() for w in BANNED_WORDS)
 
-def can_reply_to_user(user_id):
+def is_crypto_related(text: str) -> bool:
+    return any(kw in text.lower() for kw in CRYPTO_KEYWORDS)
+
+def can_reply_to_user(user_id: int) -> bool:
     now = time.time()
     last = _reply_cooldown.get(user_id, 0)
-    if now - last >= 300:
+    if now - last >= AI_REPLY_COOLDOWN:
         _reply_cooldown[user_id] = now
         return True
     return False
 
-def price_text(d):
-    c24 = float(d["change_24h"]) if d["change_24h"] else 0
-    c6  = float(d["change_6h"])  if d["change_6h"]  else 0
-    c1  = float(d["change_1h"])  if d["change_1h"]  else 0
+# ════════════════════════════════════════════════════════════════════
+# ── REFERRAL SYSTEM HELPERS
+# ════════════════════════════════════════════════════════════════════
+
+def generate_referral_code(user_id: int) -> str:
+    code = hashlib.md5(f"hrz_{user_id}".encode()).hexdigest()[:8].upper()
+    _referral_codes[code] = user_id
+    return code
+
+def get_referral_code(user_id: int) -> str:
+    for code, uid in _referral_codes.items():
+        if uid == user_id:
+            return code
+    return generate_referral_code(user_id)
+
+def process_referral(new_user_id: int, code: str) -> bool:
+    if new_user_id in _referral_used:
+        return False
+    if code not in _referral_codes:
+        return False
+    referrer_id = _referral_codes[code]
+    if referrer_id == new_user_id:
+        return False
+    _referral_used[new_user_id] = referrer_id
+    _referrals_made[referrer_id].append(new_user_id)
+    add_xp(referrer_id, XP_REFERRAL)
+    add_xp(new_user_id, 5)
+    return True
+
+# ════════════════════════════════════════════════════════════════════
+# ── TEXT FORMATTERS
+# ════════════════════════════════════════════════════════════════════
+
+def price_text(d: dict) -> str:
+    c24 = float(d["change_24h"] or 0)
+    c6  = float(d["change_6h"]  or 0)
+    c1  = float(d["change_1h"]  or 0)
+    c5m = float(d["change_5m"]  or 0)
     arrow = lambda v: "🟢" if v >= 0 else "🔴"
+    vol  = float(d["volume_24h"] or 0)
+    liq  = float(d["liquidity"]  or 0)
+    mcap = float(d["market_cap"] or 0)
+    ath  = _ath_store
     return (
-        f"🌊 <b>Hormuz (HRZ) — Live Price</b>\n\n"
+        f"🌊 <b>Hormuz (HRZ) — Live Price</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"💵 <code>${float(d['price_usd']):.10f}</code>\n"
         f"🔶 <code>{float(d['price_bnb']):.10f} BNB</code>\n\n"
+        f"<b>📊 Price Changes:</b>\n"
+        f"{arrow(c5m)} 5m:  <b>{c5m:+.2f}%</b>\n"
         f"{arrow(c1)} 1h:  <b>{c1:+.2f}%</b>\n"
         f"{arrow(c6)} 6h:  <b>{c6:+.2f}%</b>\n"
         f"{arrow(c24)} 24h: <b>{c24:+.2f}%</b>\n\n"
-        f"📊 Vol 24h: <b>${float(d['volume_24h']):,.2f}</b>\n"
-        f"💧 Liquidity: <b>${float(d['liquidity']):,.2f}</b>\n"
-        f"📈 MCap: <b>${float(d['market_cap']):,.2f}</b>\n"
-        f"🔄 Buys/Sells: <b>{d['txns_buys']}/{d['txns_sells']}</b>\n\n"
-        f"<a href='{PANCAKE_BUY}'>💱 Buy</a> | "
+        f"<b>📈 Market Data:</b>\n"
+        f"💧 Liquidity: <b>${liq:,.2f}</b>\n"
+        f"📊 Vol 24h: <b>${vol:,.2f}</b>\n"
+        f"📈 Market Cap: <b>${mcap:,.2f}</b>\n"
+        f"🔄 Buys/Sells: <b>{d['txns_buys']}/{d['txns_sells']}</b>\n"
+        f"🏆 ATH: <b>${ath['price']:.10f}</b>\n"
+        f"📡 Trend: {get_market_trend(d)}\n\n"
+        f"<a href='{PANCAKE_BUY}'>💱 Buy HRZ</a> | "
         f"<a href='{DEXSCREENER}'>📊 Chart</a> | "
         f"<a href='{TWITTER}'>🐦 Twitter</a>"
     )
 
-def main_keyboard():
+def uptime_str() -> str:
+    s = int(time.time() - _bot_start_time)
+    return f"{s//86400}d {(s%86400)//3600}h {(s%3600)//60}m"
+
+# ════════════════════════════════════════════════════════════════════
+# ── KEYBOARDS
+# ════════════════════════════════════════════════════════════════════
+
+def main_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("💰 Price",     callback_data="price"),
-            InlineKeyboardButton("📊 Stats",     callback_data="stats"),
-            InlineKeyboardButton("😱 Sentiment", callback_data="feargreed"),
+            InlineKeyboardButton("💰 Price",        callback_data="price"),
+            InlineKeyboardButton("📊 Stats",        callback_data="stats"),
+            InlineKeyboardButton("😱 Fear & Greed", callback_data="feargreed"),
         ],
         [
-            InlineKeyboardButton("💱 Buy HRZ",   url=PANCAKE_BUY),
-            InlineKeyboardButton("📉 Chart",     url=DEXSCREENER),
+            InlineKeyboardButton("💱 Buy HRZ",      url=PANCAKE_BUY),
+            InlineKeyboardButton("📉 Chart",        url=DEXSCREENER),
+            InlineKeyboardButton("🔍 BscScan",      url=BSCSCAN),
         ],
         [
-            InlineKeyboardButton("🌐 Website",   url=WEBSITE),
-            InlineKeyboardButton("🐦 Twitter",   url=TWITTER),
-            InlineKeyboardButton("🗳️ Vote",      url=COINSNIPER),
+            InlineKeyboardButton("🌐 Website",      url=WEBSITE),
+            InlineKeyboardButton("🐦 Twitter",      url=TWITTER),
+            InlineKeyboardButton("🗳️ Vote",         url=COINSNIPER),
         ],
         [
-            InlineKeyboardButton("🏆 ATH",       callback_data="ath"),
-            InlineKeyboardButton("🎖️ My XP",    callback_data="myxp"),
-            InlineKeyboardButton("📋 Contract",  callback_data="contract"),
+            InlineKeyboardButton("🏆 ATH",          callback_data="ath"),
+            InlineKeyboardButton("🎖️ My XP",       callback_data="myxp"),
+            InlineKeyboardButton("📋 Contract",     callback_data="contract"),
+        ],
+        [
+            InlineKeyboardButton("🎁 Daily XP",    callback_data="daily"),
+            InlineKeyboardButton("🏅 Leaderboard", callback_data="leaderboard"),
+            InlineKeyboardButton("🔗 Referral",    callback_data="referral"),
+        ],
+        [
+            InlineKeyboardButton("🎰 Giveaway",    callback_data="giveaway_info"),
+            InlineKeyboardButton("📡 Sentiment",   callback_data="sentiment_info"),
+            InlineKeyboardButton("ℹ️ About",        callback_data="about"),
         ],
     ])
 
-# ── SCHEDULED JOBS (defined BEFORE cmd_schedule) ──────────────────────────────
+def buy_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🛒 Buy on PancakeSwap", url=PANCAKE_BUY)],
+        [
+            InlineKeyboardButton("📊 Chart",  url=DEXSCREENER),
+            InlineKeyboardButton("🔍 Contract", url=BSCSCAN),
+        ],
+        [InlineKeyboardButton("⬅️ Back", callback_data="back")],
+    ])
+
+# ════════════════════════════════════════════════════════════════════
+# ── SCHEDULED JOBS
+# ════════════════════════════════════════════════════════════════════
 
 async def scheduled_post(ctx: ContextTypes.DEFAULT_TYPE):
-    global _post_index
+    global _post_index, _total_posts
     chat_id = ctx.job.chat_id
     post_type = POST_TYPES[_post_index % len(POST_TYPES)]
     _post_index += 1
+    _total_posts += 1
     post = generate_post(post_type)
     try:
         await ctx.bot.send_message(
-            chat_id=chat_id, text=post, parse_mode="HTML",
+            chat_id=chat_id,
+            text=post,
+            parse_mode=ParseMode.HTML,
             disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("💱 Buy HRZ", url=PANCAKE_BUY),
@@ -333,17 +817,21 @@ async def scheduled_post(ctx: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Auto post error: {e}")
 
 async def post_to_channel(ctx: ContextTypes.DEFAULT_TYPE):
-    global _post_index
+    global _post_index, _total_posts
     post_type = POST_TYPES[_post_index % len(POST_TYPES)]
     _post_index += 1
+    _total_posts += 1
     post = generate_post(post_type)
     try:
         await ctx.bot.send_message(
-            chat_id=CHANNEL_ID, text=post, parse_mode="HTML",
+            chat_id=CHANNEL_ID,
+            text=post,
+            parse_mode=ParseMode.HTML,
             disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("💱 Buy HRZ", url=PANCAKE_BUY),
                 InlineKeyboardButton("📊 Chart",   url=DEXSCREENER),
+                InlineKeyboardButton("🌐 Website", url=WEBSITE),
             ]])
         )
     except Exception as e:
@@ -352,12 +840,16 @@ async def post_to_channel(ctx: ContextTypes.DEFAULT_TYPE):
 async def scheduled_quiz(ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = ctx.job.chat_id
     q = random.choice(QUIZ_QUESTIONS)
-    _quiz_active[chat_id] = q
+    _quiz_active[chat_id] = {**q, "start_time": time.time()}
     try:
         await ctx.bot.send_message(
             chat_id=chat_id,
-            text=f"{q['q']}\n\n⏰ <b>First correct answer wins +{XP_QUIZ_WIN} XP!</b> 🎯",
-            parse_mode="HTML"
+            text=(
+                f"{q['q']}\n\n"
+                f"⏰ <b>First correct answer wins +{q.get('xp', 20)} XP!</b> 🎯\n"
+                f"<i>Reply with the letter (A/B/C/D) or the answer</i>"
+            ),
+            parse_mode=ParseMode.HTML
         )
     except Exception as e:
         logger.error(f"Quiz error: {e}")
@@ -365,59 +857,62 @@ async def scheduled_quiz(ctx: ContextTypes.DEFAULT_TYPE):
 async def buy_bot_tick(ctx: ContextTypes.DEFAULT_TYPE):
     global _last_seen_tx
     chat_id = ctx.job.chat_id
-    data = http_get(
-        f"https://api.bscscan.com/api?module=account&action=tokentx"
-        f"&contractaddress={HRZ_CONTRACT}&sort=desc&offset=5&page=1"
-    )
-    if not data or not isinstance(data.get("result"), list):
-        return
-    txs = data["result"]
+    txs = fetch_latest_buys()
     if not txs:
         return
-
     new_buys = []
     for tx in txs:
         if tx.get("hash") == _last_seen_tx:
             break
         new_buys.append(tx)
-
     if new_buys:
         _last_seen_tx = txs[0].get("hash", "")
-
     d = fetch_hrz_price()
+    bnb_usd = fetch_bnb_price()
     for tx in reversed(new_buys):
         try:
-            value_raw = int(tx.get("value", 0))
-            decimals  = int(tx.get("tokenDecimal", 18))
-            amount    = value_raw / (10 ** decimals)
-            tx_hash   = tx.get("hash", "")
+            value_raw  = int(tx.get("value", 0))
+            decimals   = int(tx.get("tokenDecimal", 18))
+            amount     = value_raw / (10 ** decimals)
+            tx_hash    = tx.get("hash", "")
+            buyer_addr = tx.get("to", "")
             usd_val = bnb_val = 0.0
             if d:
-                usd_val = amount * float(d.get("price_usd", 0))
-                bnb_val = amount * float(d.get("price_bnb", 0))
-            if bnb_val > 0 and bnb_val < MIN_BUY_BNB:
+                price   = float(d.get("price_usd", 0) or 0)
+                usd_val = amount * price
+                if bnb_usd > 0:
+                    bnb_val = usd_val / bnb_usd
+            if usd_val < 0.5:
                 continue
-            is_whale = bnb_val >= WHALE_THRESHOLD_BNB
-            header = "🐋 <b>WHALE BUY DETECTED!</b> 🐋" if is_whale else "🟢 <b>NEW HRZ BUY!</b>"
-            footer = "🚀🚀 Big money entering $HRZ!" if is_whale else "🚀 Welcome new holder!"
-            buyer = tx.get("to", "")[:8] + "..."
+            is_whale   = usd_val >= WHALE_THRESHOLD_USD
+            buyer_short= buyer_addr[:6] + "..." + buyer_addr[-4:] if len(buyer_addr) > 10 else buyer_addr
+            if is_whale:
+                header = "🐋🚨 <b>WHALE BUY DETECTED!</b> 🚨🐋"
+                footer = "🚀🚀 <b>Big money entering $HRZ!</b>\n#HRZ #Hormuz #WhaleAlert"
+            else:
+                header = f"🟢 <b>NEW HRZ BUY!</b>"
+                footer = "🚀 Welcome to the HRZ family!\n#HRZ #Hormuz #BNBChain"
+            msg_text = (
+                f"{header}\n\n"
+                f"🌊 <b>{amount:,.0f} HRZ</b>\n"
+                f"💵 ≈ <b>${usd_val:,.4f}</b>"
+                f"{f' ({bnb_val:.4f} BNB)' if bnb_val > 0 else ''}\n"
+                f"👤 <code>{buyer_short}</code>\n"
+                f"🔗 <a href='https://bscscan.com/tx/{tx_hash}'>View on BscScan</a>\n\n"
+                f"{footer}"
+            )
             await ctx.bot.send_message(
                 chat_id=chat_id,
-                text=(
-                    f"{header}\n\n"
-                    f"🌊 <b>{amount:,.0f} HRZ</b>\n"
-                    f"💵 ~<b>${usd_val:,.4f}</b> ({bnb_val:.4f} BNB)\n"
-                    f"👤 <code>{buyer}</code>\n"
-                    f"🔗 <a href='https://bscscan.com/tx/{tx_hash}'>View Tx</a>\n\n{footer}"
-                ),
-                parse_mode="HTML", disable_web_page_preview=True,
+                text=msg_text,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("💱 Buy Too!", url=PANCAKE_BUY),
-                    InlineKeyboardButton("📊 Chart",    url=DEXSCREENER)
+                    InlineKeyboardButton("📊 Chart",    url=DEXSCREENER),
                 ]])
             )
         except Exception as e:
-            logger.error(f"Buy bot: {e}")
+            logger.error(f"Buy bot tx error: {e}")
 
 async def ath_check_tick(ctx: ContextTypes.DEFAULT_TYPE):
     global _ath_alerted
@@ -425,26 +920,28 @@ async def ath_check_tick(ctx: ContextTypes.DEFAULT_TYPE):
     d = fetch_hrz_price(force=True)
     if not d:
         return
-    current = float(d["price_usd"])
-    if current > _ath_alerted * 1.01:
+    current = float(d["price_usd"] or 0)
+    if current > 0 and current > _ath_alerted * 1.005:
         _ath_alerted = current
+        c24 = float(d.get("change_24h", 0) or 0)
         try:
             await ctx.bot.send_message(
                 chat_id=chat_id,
                 text=(
                     f"🏆🚀 <b>NEW ALL-TIME HIGH!</b> 🚀🏆\n\n"
-                    f"💵 ATH: <b>${current:.10f}</b>\n"
-                    f"📅 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n\n"
-                    f"🌊 Hormuz (HRZ) is making history! #HRZ #ATH"
+                    f"💵 <b>${current:.10f}</b>\n"
+                    f"📈 24h: <b>{c24:+.2f}%</b>\n\n"
+                    f"🌊 The Strait has never been this powerful!\n"
+                    f"💎 HODL strong, HRZ Army!\n\n"
+                    f"<a href='{DEXSCREENER}'>📊 View Chart</a> | "
+                    f"<a href='{PANCAKE_BUY}'>💱 Buy Now</a>\n\n"
+                    f"#HRZ #Hormuz #ATH #BNBChain 🔥"
                 ),
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("💱 Buy Now!", url=PANCAKE_BUY),
-                    InlineKeyboardButton("📊 Chart",    url=DEXSCREENER)
-                ]])
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True
             )
         except Exception as e:
-            logger.error(f"ATH alert: {e}")
+            logger.error(f"ATH alert error: {e}")
 
 async def vote_reminder(ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = ctx.job.chat_id
@@ -453,547 +950,1540 @@ async def vote_reminder(ctx: ContextTypes.DEFAULT_TYPE):
             chat_id=chat_id,
             text=(
                 f"🗳️ <b>Daily Vote Reminder!</b>\n\n"
-                f"Help HRZ reach more investors!\n"
-                f"Takes only 10 seconds! 🎖️\n\n"
-                f"<a href='{COINSNIPER}'>Vote on CoinSniper!</a>\n\n"
-                f"Use /vote to earn +{XP_VOTE} XP! 🚀"
+                f"Your vote = +{XP_VOTE} XP + helps HRZ rank higher! 🚀\n\n"
+                f"Vote now and boost our visibility:\n\n"
+                f"• <a href='{COINSNIPER}'>🎯 CoinSniper</a>\n"
+                f"• <a href='{GEMFINDER}'>💎 GemFinder</a>\n"
+                f"• <a href='{COINHUNT}'>🔍 CoinHunt</a>\n\n"
+                f"Type /voted after voting to claim your XP! 🎁"
             ),
-            parse_mode="HTML", disable_web_page_preview=True
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True
         )
     except Exception as e:
-        logger.error(f"Vote reminder: {e}")
+        logger.error(f"Vote reminder error: {e}")
 
 async def daily_report(ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = ctx.job.chat_id
-    d = fetch_hrz_price()
+    d = fetch_hrz_price(force=True)
     fg = fetch_fear_greed()
+    bnb = fetch_bnb_price()
     if not d:
         return
-    c24 = float(d["change_24h"]) if d["change_24h"] else 0
-    arrow = "📈" if c24 >= 0 else "📉"
+    c24   = float(d["change_24h"] or 0)
+    vol   = float(d["volume_24h"] or 0)
+    liq   = float(d["liquidity"]  or 0)
+    price = float(d["price_usd"]  or 0)
+    top_holders = sorted(_xp_store.items(), key=lambda x: x[1], reverse=True)[:3]
+    top_text = ""
+    for i, (uid, xp) in enumerate(top_holders, 1):
+        medals = ["🥇", "🥈", "🥉"]
+        top_text += f"{medals[i-1]} User {uid}: <b>{xp} XP</b>\n"
+    sentiment_data = _sentiment_votes.get(chat_id, {})
+    bull_count = len(sentiment_data.get("bullish", set()))
+    bear_count = len(sentiment_data.get("bearish", set()))
+    arrow = "🟢" if c24 >= 0 else "🔴"
     try:
         await ctx.bot.send_message(
             chat_id=chat_id,
             text=(
-                f"☀️ <b>HRZ Daily Report</b>\n"
-                f"📅 {datetime.now(timezone.utc).strftime('%Y-%m-%d UTC')}\n\n"
-                f"💵 Price: <b>${float(d['price_usd']):.10f}</b>\n"
-                f"{arrow} 24h: <b>{c24:+.2f}%</b>\n"
-                f"📊 Vol 24h: <b>${float(d['volume_24h']):,.2f}</b>\n"
-                f"💧 Liquidity: <b>${float(d['liquidity']):,.2f}</b>\n"
-                f"😱 Fear & Greed: <b>{fg['value']} — {fg['label']}</b>\n\n"
-                f"#HRZ #Hormuz #BNBChain #DailyReport"
+                f"📊 <b>HRZ Daily Report</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"💵 Price: <b>${price:.10f}</b>\n"
+                f"{arrow} 24h Change: <b>{c24:+.2f}%</b>\n"
+                f"📊 Volume: <b>${vol:,.2f}</b>\n"
+                f"💧 Liquidity: <b>${liq:,.2f}</b>\n"
+                f"🔄 Buys/Sells: <b>{d['txns_buys']}/{d['txns_sells']}</b>\n"
+                f"😱 Fear & Greed: <b>{fg['value']} ({fg['label']})</b>\n"
+                f"🔶 BNB Price: <b>${bnb:.2f}</b>\n\n"
+                f"<b>🏆 Top XP Holders:</b>\n{top_text if top_text else 'No data yet'}\n"
+                f"<b>📡 Community Sentiment:</b>\n"
+                f"🟢 Bullish: {bull_count} | 🔴 Bearish: {bear_count}\n\n"
+                f"<a href='{PANCAKE_BUY}'>💱 Buy HRZ</a> | "
+                f"<a href='{DEXSCREENER}'>📊 Chart</a>\n\n"
+                f"#HRZ #Hormuz #DailyReport 🌊"
             ),
-            parse_mode="HTML", disable_web_page_preview=True
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True
         )
     except Exception as e:
-        logger.error(f"Daily report: {e}")
+        logger.error(f"Daily report error: {e}")
 
-# ── COMMANDS ──────────────────────────────────────────────────────────────────
+# ── PRICE ALERTS JOB
+async def price_alert_tick(ctx: ContextTypes.DEFAULT_TYPE):
+    d = fetch_hrz_price()
+    if not d:
+        return
+    current = float(d["price_usd"] or 0)
+    if current <= 0:
+        return
+    to_remove = []
+    for user_id, alerts in list(_price_alerts.items()):
+        still_active = []
+        for alert in alerts:
+            target    = alert["target"]
+            direction = alert["direction"]  # "above" or "below"
+            chat_id   = alert["chat_id"]
+            triggered = (direction == "above" and current >= target) or \
+                        (direction == "below" and current <= target)
+            if triggered:
+                try:
+                    arrow = "📈" if direction == "above" else "📉"
+                    await ctx.bot.send_message(
+                        chat_id=user_id,
+                        text=(
+                            f"🔔 <b>Price Alert Triggered!</b> {arrow}\n\n"
+                            f"$HRZ is now <b>${current:.10f}</b>\n"
+                            f"Your target: <b>${target:.10f}</b> ({direction})\n\n"
+                            f"<a href='{PANCAKE_BUY}'>💱 Trade Now</a> | "
+                            f"<a href='{DEXSCREENER}'>📊 Chart</a>"
+                        ),
+                        parse_mode=ParseMode.HTML,
+                        disable_web_page_preview=True
+                    )
+                except Exception as e:
+                    logger.error(f"Price alert send error: {e}")
+            else:
+                still_active.append(alert)
+        _price_alerts[user_id] = still_active
+
+# ── SENTIMENT POST JOB
+async def sentiment_post(ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = ctx.job.chat_id
+    today   = datetime.now(timezone.utc).date().isoformat()
+    # Reset for new day
+    _sentiment_votes[chat_id] = {
+        "bullish": set(),
+        "bearish": set(),
+        "date":    today,
+        "msg_id":  None
+    }
+    try:
+        d = fetch_hrz_price()
+        price_str = f"${float(d['price_usd']):.10f}" if d else "N/A"
+        msg = await ctx.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"📡 <b>Community Sentiment Vote!</b>\n\n"
+                f"💵 Current Price: <b>{price_str}</b>\n\n"
+                f"How do you feel about $HRZ today?\n\n"
+                f"🟢 <b>Bullish</b> — I think HRZ will go UP!\n"
+                f"🔴 <b>Bearish</b> — I think HRZ will go DOWN\n\n"
+                f"Vote below and earn +{XP_VOTE} XP! 🎯"
+            ),
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🟢 Bullish 🚀", callback_data="sentiment_bull"),
+                InlineKeyboardButton("🔴 Bearish 📉", callback_data="sentiment_bear"),
+            ]])
+        )
+        _sentiment_votes[chat_id]["msg_id"] = msg.message_id
+    except Exception as e:
+        logger.error(f"Sentiment post error: {e}")
+
+# ── LEADERBOARD POST JOB
+async def post_leaderboard(ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = ctx.job.chat_id
+    top = sorted(_xp_store.items(), key=lambda x: x[1], reverse=True)[:10]
+    if not top:
+        return
+    medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
+    lines = [f"<b>🏆 HRZ XP Leaderboard</b>\n{'━'*20}\n"]
+    for i, (uid, xp) in enumerate(top):
+        level = get_level(xp)
+        lines.append(f"{medals[i]} <b>#{i+1}</b> | {level} | <b>{xp} XP</b>")
+    lines.append(f"\n💡 Earn XP: Chat, Quiz, Vote, Daily, Refer friends!")
+    try:
+        await ctx.bot.send_message(
+            chat_id=chat_id,
+            text="\n".join(lines),
+            parse_mode=ParseMode.HTML
+        )
+    except Exception as e:
+        logger.error(f"Leaderboard post error: {e}")
+
+# ── GIVEAWAY END JOB
+async def end_giveaway(ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = ctx.job.chat_id
+    giveaway = _giveaway_active.get(chat_id)
+    if not giveaway:
+        return
+    entries = list(giveaway.get("entries", set()))
+    prize   = giveaway.get("prize_xp", 100)
+    if not entries:
+        try:
+            await ctx.bot.send_message(
+                chat_id=chat_id,
+                text="🎰 <b>Giveaway ended!</b>\n\nNo participants. Better luck next time! 😢",
+                parse_mode=ParseMode.HTML
+            )
+        except Exception:
+            pass
+        _giveaway_active.pop(chat_id, None)
+        return
+    winner_id = random.choice(entries)
+    leveled_up = add_xp(winner_id, prize)
+    try:
+        winner = await ctx.bot.get_chat_member(chat_id, winner_id)
+        name   = winner.user.first_name
+    except Exception:
+        name = f"User {winner_id}"
+    try:
+        await ctx.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"🎉🎊 <b>GIVEAWAY WINNER!</b> 🎊🎉\n\n"
+                f"🏆 Congratulations <b>{name}</b>!\n"
+                f"🎁 You won <b>{prize} XP!</b>\n"
+                f"{'🆙 You leveled up! ' if leveled_up else ''}\n\n"
+                f"Total participants: <b>{len(entries)}</b>\n\n"
+                f"🌊 Thanks to everyone who joined!\n"
+                f"Next giveaway coming soon! 🎰\n\n"
+                f"#HRZ #Hormuz #Giveaway"
+            ),
+            parse_mode=ParseMode.HTML
+        )
+    except Exception as e:
+        logger.error(f"Giveaway end error: {e}")
+    _giveaway_active.pop(chat_id, None)
+
+# ── ANTI-RAID CHECK JOB
+async def anti_raid_check(ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = ctx.job.chat_id
+    now = time.time()
+    # Auto-lift raid mode after 5 minutes
+    if _raid_mode.get(chat_id) and _raid_mode_until.get(chat_id, 0) < now:
+        _raid_mode[chat_id] = False
+        try:
+            await ctx.bot.set_chat_permissions(
+                chat_id=chat_id,
+                permissions=ChatPermissions(
+                    can_send_messages=True,
+                    can_send_polls=True,
+                    can_send_other_messages=True,
+                    can_add_web_page_previews=True,
+                )
+            )
+            await ctx.bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"🛡️ <b>Anti-Raid Mode: DEACTIVATED</b>\n\n"
+                    f"✅ Group is now open again.\n"
+                    f"All restrictions have been lifted! 🌊"
+                ),
+                parse_mode=ParseMode.HTML
+            )
+        except Exception as e:
+            logger.error(f"Anti-raid lift error: {e}")
+
+# ════════════════════════════════════════════════════════════════════
+# ── COMMAND HANDLERS
+# ════════════════════════════════════════════════════════════════════
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    add_xp(update.effective_user.id, XP_COMMAND)
-    add_badge(update.effective_user.id, "early_holder")
-    await update.message.reply_html(
-        "🌊 <b>Hormuz (HRZ) Bot v6</b>\n\n"
-        "📢 Auto-posts every <b>20 minutes</b>\n"
-        "🧠 Quiz every <b>hour</b>\n"
-        "🐋 Whale & Buy alerts\n"
-        "🏆 ATH detection\n\n"
-        "Type /schedule to activate!\nType /help for commands.",
-        reply_markup=main_keyboard()
+    user = update.effective_user
+    args = ctx.args
+    # Process referral if any
+    ref_msg = ""
+    if args and args[0].startswith("ref_"):
+        code = args[0][4:]
+        if process_referral(user.id, code):
+            referrer_id = _referral_used.get(user.id)
+            ref_msg = f"\n\n🎁 You joined via referral! <b>+5 XP</b> added to your account!"
+            try:
+                await ctx.bot.send_message(
+                    chat_id=referrer_id,
+                    text=(
+                        f"🎯 <b>New Referral!</b>\n\n"
+                        f"Someone joined HRZ using your referral link!\n"
+                        f"You earned <b>+{XP_REFERRAL} XP</b>! 🎉"
+                    ),
+                    parse_mode=ParseMode.HTML
+                )
+            except Exception:
+                pass
+    text = (
+        f"🌊 <b>Welcome to Hormuz (HRZ) Bot!</b> 🌊\n\n"
+        f"👋 Hey <b>{user.first_name}</b>! I'm the official HRZ bot.\n\n"
+        f"<b>🚀 Hormuz (HRZ)</b> — Inspired by the world's most strategic strait,\n"
+        f"controlling 20% of global oil supply!\n\n"
+        f"<b>📋 What I can do:</b>\n"
+        f"💰 Live price & market data\n"
+        f"🧠 AI-powered crypto chat\n"
+        f"🎮 Quiz games with XP rewards\n"
+        f"🎁 Daily XP & giveaways\n"
+        f"🔔 Personal price alerts\n"
+        f"🗳️ Community sentiment voting\n"
+        f"🔗 Referral rewards\n"
+        f"🤖 Auto whale alerts & buy notifications\n\n"
+        f"<b>⚡ Quick Commands:</b>\n"
+        f"/price — Live price\n"
+        f"/buy — How to buy\n"
+        f"/quiz — Take a quiz\n"
+        f"/alert — Set price alert\n"
+        f"/refer — Referral link\n"
+        f"/myxp — Your XP & level\n"
+        f"/help — All commands\n"
+        f"{ref_msg}"
     )
+    await update.message.reply_html(text, reply_markup=main_keyboard())
+
+async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    text = (
+        f"📚 <b>HRZ Bot — All Commands</b>\n"
+        f"{'━'*25}\n\n"
+        f"<b>📊 Market Commands:</b>\n"
+        f"/price — Live HRZ price\n"
+        f"/stats — Detailed market stats\n"
+        f"/ath — All-time high\n"
+        f"/chart — Chart link\n"
+        f"/feargreed — Market sentiment\n\n"
+        f"<b>💱 Trading Commands:</b>\n"
+        f"/buy — How to buy HRZ\n"
+        f"/contract — Contract address\n"
+        f"/liquidity — Liquidity info\n"
+        f"/tokenomics — Token breakdown\n\n"
+        f"<b>🎮 Social Commands:</b>\n"
+        f"/quiz — Take a quiz\n"
+        f"/myxp — Your XP & level\n"
+        f"/daily — Claim daily XP\n"
+        f"/leaderboard — Top XP holders\n"
+        f"/voted — Claim vote XP\n"
+        f"/refer — Your referral link\n\n"
+        f"<b>🔔 Alert Commands:</b>\n"
+        f"/alert [price] [above/below] — Set price alert\n"
+        f"/myalerts — View your alerts\n"
+        f"/cancelalert — Remove alerts\n\n"
+        f"<b>📡 Community Commands:</b>\n"
+        f"/sentiment — Today's vote\n"
+        f"/giveaway — Active giveaway\n"
+        f"/suggest [idea] — Submit suggestion\n\n"
+        f"<b>🤖 AI Commands:</b>\n"
+        f"/ask [question] — Ask AI anything\n\n"
+        f"<b>ℹ️ Info Commands:</b>\n"
+        f"/about — About HRZ\n"
+        f"/links — All official links\n"
+        f"/roadmap — Project roadmap\n\n"
+        f"<b>🛡️ Admin Commands:</b>\n"
+        f"/schedule — Start all auto-jobs\n"
+        f"/stopschedule — Stop all jobs\n"
+        f"/warn @user — Warn user\n"
+        f"/mute @user [mins] — Mute user\n"
+        f"/ban @user — Ban user\n"
+        f"/startgiveaway [xp] [mins] — Start giveaway\n"
+        f"/announce [text] — Announce message\n"
+        f"/botstats — Bot statistics\n"
+    )
+    await update.message.reply_html(text)
 
 async def cmd_price(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    add_xp(update.effective_user.id, XP_COMMAND)
     msg = await update.message.reply_text("⏳ Fetching live price...")
     d = fetch_hrz_price(force=True)
     if not d:
-        await msg.edit_text("❌ Price unavailable. Check DexScreener.", parse_mode="HTML")
+        await msg.edit_text("❌ Price data unavailable. Try again shortly.")
         return
     await msg.edit_text(
-        price_text(d), parse_mode="HTML", disable_web_page_preview=True,
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("💱 Buy", url=PANCAKE_BUY),
-            InlineKeyboardButton("📊 Chart", url=DEXSCREENER)
-        ]])
+        price_text(d),
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+        reply_markup=buy_keyboard()
+    )
+
+async def cmd_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    msg = await update.message.reply_text("⏳ Fetching stats...")
+    d   = fetch_hrz_price(force=True)
+    fg  = fetch_fear_greed()
+    bnb = fetch_bnb_price()
+    if not d:
+        await msg.edit_text("❌ Stats unavailable. Try again.")
+        return
+    c24  = float(d["change_24h"] or 0)
+    vol  = float(d["volume_24h"] or 0)
+    liq  = float(d["liquidity"]  or 0)
+    mcap = float(d["market_cap"] or 0)
+    fdv  = float(d["fdv"]        or 0)
+    p    = float(d["price_usd"]  or 0)
+    p5m  = float(d["change_5m"]  or 0)
+    p1h  = float(d["change_1h"]  or 0)
+    p6h  = float(d["change_6h"]  or 0)
+    v5m  = float(d["volume_5m"]  or 0)
+    v1h  = float(d["volume_1h"]  or 0)
+    b5m  = d["txns_5m_buys"]
+    s5m  = d["txns_5m_sells"]
+    ratio= f"{b5m}/{s5m}" if (b5m or s5m) else "N/A"
+    await msg.edit_text(
+        f"📊 <b>HRZ Detailed Stats</b>\n"
+        f"{'━'*22}\n\n"
+        f"<b>💵 Price:</b> <code>${p:.10f}</code>\n"
+        f"<b>📈 5m:</b> {p5m:+.2f}%  |  <b>1h:</b> {p1h:+.2f}%\n"
+        f"<b>📈 6h:</b> {p6h:+.2f}%  |  <b>24h:</b> {c24:+.2f}%\n\n"
+        f"<b>💧 Liquidity:</b> ${liq:,.2f}\n"
+        f"<b>📊 Vol 24h:</b> ${vol:,.2f}\n"
+        f"<b>📊 Vol 5m:</b> ${v5m:,.2f}\n"
+        f"<b>📊 Vol 1h:</b> ${v1h:,.2f}\n"
+        f"<b>📈 Market Cap:</b> ${mcap:,.2f}\n"
+        f"<b>💎 FDV:</b> ${fdv:,.2f}\n"
+        f"<b>🔄 Buy/Sell (5m):</b> {ratio}\n"
+        f"<b>🔄 Buy/Sell (24h):</b> {d['txns_buys']}/{d['txns_sells']}\n\n"
+        f"<b>😱 Fear & Greed:</b> {fg['value']} ({fg['label']})\n"
+        f"<b>🔶 BNB Price:</b> ${bnb:.2f}\n"
+        f"<b>📡 Trend:</b> {get_market_trend(d)}\n\n"
+        f"<a href='{DEXSCREENER}'>📊 Full Chart</a> | "
+        f"<a href='{PANCAKE_BUY}'>💱 Buy HRZ</a>",
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True
     )
 
 async def cmd_buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    add_xp(update.effective_user.id, XP_COMMAND)
     await update.message.reply_html(
-        f"💱 <b>How to Buy HRZ</b>\n\n"
-        f"1️⃣ Get BNB on BNB Chain\n"
-        f"2️⃣ Open PancakeSwap\n"
-        f"3️⃣ Paste contract:\n<code>{HRZ_CONTRACT}</code>\n\n"
-        f"⚙️ Slippage: <b>5-10%</b>\n✅ Buy Tax: <b>0%</b>\n\n"
-        f"<a href='{PANCAKE_BUY}'>Open PancakeSwap Now</a>",
+        f"💱 <b>How to Buy HRZ</b>\n"
+        f"{'━'*20}\n\n"
+        f"<b>Step 1:</b> Get BNB (from Binance, etc.)\n"
+        f"<b>Step 2:</b> Send BNB to your wallet (MetaMask/Trust Wallet)\n"
+        f"<b>Step 3:</b> Open <a href='{PANCAKE_BUY}'>PancakeSwap</a>\n"
+        f"<b>Step 4:</b> Paste contract address:\n"
+        f"<code>{HRZ_CONTRACT}</code>\n"
+        f"<b>Step 5:</b> Set slippage to 5-7% and swap!\n\n"
+        f"✅ Buy Tax: <b>0%</b>\n"
+        f"⚠️ Sell Tax: <b>3%</b>\n"
+        f"🔒 Liquidity: <b>Locked 1 Year</b>\n"
+        f"📋 Verified: <b>BscScan</b>\n\n"
+        f"<b>🌐 Official Links:</b>\n"
+        f"• <a href='{PANCAKE_BUY}'>💱 Buy on PancakeSwap</a>\n"
+        f"• <a href='{DEXSCREENER}'>📊 Live Chart</a>\n"
+        f"• <a href='{BSCSCAN}'>🔍 BscScan</a>",
+        disable_web_page_preview=True,
+        reply_markup=buy_keyboard()
+    )
+
+async def cmd_ath(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ath = _ath_store
+    d   = fetch_hrz_price()
+    current = float(d["price_usd"] or 0) if d else 0
+    diff_pct = ((current - ath["price"]) / ath["price"] * 100) if ath["price"] > 0 else 0
+    await update.message.reply_html(
+        f"🏆 <b>HRZ All-Time High</b>\n\n"
+        f"🚀 ATH Price: <b>${ath['price']:.10f}</b>\n"
+        f"📅 Date: <b>{ath.get('date', 'Unknown')}</b>\n"
+        f"💵 Current: <b>${current:.10f}</b>\n"
+        f"📉 From ATH: <b>{diff_pct:+.2f}%</b>\n\n"
+        f"{'💎 Hodl strong — new ATH incoming! 🚀' if diff_pct < 0 else '🔥 We ARE at ATH right now!'}",
         disable_web_page_preview=True
+    )
+
+async def cmd_feargreed(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    fg = fetch_fear_greed()
+    value = int(fg["value"]) if str(fg["value"]).isdigit() else 50
+    if value <= 20:   emoji = "😱"
+    elif value <= 40: emoji = "😰"
+    elif value <= 60: emoji = "😐"
+    elif value <= 80: emoji = "😊"
+    else:             emoji = "🤑"
+    bar = "█" * (value // 10) + "░" * (10 - value // 10)
+    await update.message.reply_html(
+        f"😱 <b>Crypto Fear & Greed Index</b>\n\n"
+        f"{emoji} <b>{fg['value']} — {fg['label']}</b>\n\n"
+        f"[{bar}] {value}/100\n\n"
+        f"<i>0 = Extreme Fear | 100 = Extreme Greed</i>\n\n"
+        f"{'📉 Extreme Fear = Buy opportunity!' if value <= 30 else '📈 High greed = Be cautious!' if value >= 80 else '⚖️ Market is balanced right now.'}"
     )
 
 async def cmd_contract(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(
-        f"📍 <b>HRZ Contract</b>\n\n<code>{HRZ_CONTRACT}</code>\n\n"
-        f"✅ Verified | 🔒 Locked 1yr | 0% Buy Tax | 3% Sell Tax\n\n"
-        f"<a href='{PANCAKE_BUY}'>Buy</a> | <a href='{DEXSCREENER}'>Chart</a> | <a href='{BSCSCAN}'>BSCScan</a>",
-        disable_web_page_preview=True
-    )
-
-async def cmd_info(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_html(
-        f"🌊 <b>About Hormuz (HRZ)</b>\n\n"
-        f"Inspired by the Strait of Hormuz — controlling 20% of global oil.\n\n"
-        f"• Ticker: <b>HRZ</b> | Chain: <b>BNB Chain</b>\n"
-        f"• Supply: <b>1,000,000,000</b>\n"
-        f"• Buy Tax: <b>0%</b> | Sell Tax: <b>3%</b>\n"
-        f"• Contract: Verified ✅ | Liquidity: Locked 🔒\n\n"
-        f"<a href='{WEBSITE}'>Website</a> | <a href='{PANCAKE_BUY}'>Buy</a> | <a href='{TWITTER}'>Twitter</a>",
-        disable_web_page_preview=True
-    )
-
-async def cmd_ath(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    d = fetch_hrz_price()
-    ath = _ath_store
-    current = float(d["price_usd"]) if d else 0
-    distance = ((ath["price"] - current) / ath["price"] * 100) if ath["price"] > 0 else 0
-    await update.message.reply_html(
-        f"🏆 <b>HRZ All-Time High</b>\n\n"
-        f"ATH: <b>${ath['price']:.10f}</b>\n"
-        f"Date: <b>{ath['date'] or 'Tracking...'}</b>\n\n"
-        f"📍 Current: <b>${current:.10f}</b>\n"
-        f"{'🚀 AT ATH!' if current >= ath['price'] * 0.99 else f'📉 {distance:.1f}% below ATH'}"
-    )
-
-async def cmd_vote(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    add_xp(update.effective_user.id, XP_VOTE)
-    add_badge(update.effective_user.id, "voter")
-    await update.message.reply_html(
-        f"🗳️ <b>Vote for HRZ!</b>\n\nTakes 10 seconds!\n\n"
-        f"<a href='{COINSNIPER}'>Vote Now!</a>\n\n✅ +{XP_VOTE} XP earned!",
-        disable_web_page_preview=True
-    )
-
-async def cmd_shill(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    add_xp(update.effective_user.id, XP_COMMAND)
-    d = fetch_hrz_price()
-    price = f"${float(d['price_usd']):.10f}" if d else "Check DexScreener"
-    await update.message.reply_html(
-        f"📣 <b>Copy & Share!</b>\n\n"
-        f"🌊 <b>Hormuz (HRZ) — BNB Chain Gem!</b>\n\n"
-        f"💵 Price: {price}\n"
-        f"✅ Verified | ✅ Liquidity Locked 1yr | ✅ 0% Buy Tax\n\n"
+        f"📋 <b>HRZ Contract Address</b>\n\n"
+        f"Network: <b>BNB Chain (BSC)</b>\n\n"
         f"<code>{HRZ_CONTRACT}</code>\n\n"
-        f"💱 {PANCAKE_BUY}\n📊 {DEXSCREENER}\n\n"
-        f"#HRZ #Hormuz #BNBChain #BSCGems",
+        f"✅ Verified on BscScan\n"
+        f"🔒 Liquidity Locked 1 Year\n"
+        f"🛡️ No hidden functions\n\n"
+        f"<a href='{BSCSCAN}'>🔍 View on BscScan</a>"
+    )
+
+async def cmd_tokenomics(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_html(
+        f"📊 <b>HRZ Tokenomics</b>\n"
+        f"{'━'*20}\n\n"
+        f"🏷️ Name: <b>Hormuz (HRZ)</b>\n"
+        f"🌐 Network: <b>BNB Chain</b>\n"
+        f"💎 Total Supply: <b>1,000,000,000 HRZ</b>\n"
+        f"🛒 Buy Tax: <b>0%</b>\n"
+        f"💸 Sell Tax: <b>3%</b>\n"
+        f"🔒 Liquidity: <b>Locked 1 Year (PinkLock)</b>\n"
+        f"✅ Contract: <b>Verified (BscScan)</b>\n"
+        f"📊 DEX: <b>PancakeSwap V2</b>\n\n"
+        f"<b>💡 Tax Usage:</b>\n"
+        f"• 3% sell tax → Development & Marketing\n\n"
+        f"<a href='{BSCSCAN}'>🔍 BscScan</a> | <a href='{PINKLOCK}'>🔒 PinkLock</a>"
+    )
+
+async def cmd_liquidity(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    d = fetch_hrz_price()
+    liq = float(d["liquidity"] or 0) if d else 0
+    await update.message.reply_html(
+        f"💧 <b>HRZ Liquidity Info</b>\n\n"
+        f"💵 Current Liquidity: <b>${liq:,.2f}</b>\n"
+        f"🔒 Status: <b>Locked 1 Year on PinkLock</b>\n"
+        f"📋 Lock Proof: <a href='{PINKLOCK}'>View Lock</a>\n\n"
+        f"<b>Why locked liquidity matters:</b>\n"
+        f"✅ Dev cannot remove liquidity\n"
+        f"✅ No rug pull possible\n"
+        f"✅ Investors are protected\n"
+        f"✅ Safe trading environment"
+    )
+
+async def cmd_about(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_html(
+        f"🌊 <b>About Hormuz (HRZ)</b>\n"
+        f"{'━'*22}\n\n"
+        f"<b>Hormuz (HRZ)</b> is a BNB Chain token inspired by "
+        f"the world's most strategic waterway — the Strait of Hormuz, "
+        f"which controls 20% of the global oil supply! 🛢️\n\n"
+        f"<b>🏆 Key Facts:</b>\n"
+        f"• Launched: {HRZ_LAUNCH}\n"
+        f"• Network: {HRZ_NETWORK}\n"
+        f"• Supply: 1,000,000,000 HRZ\n"
+        f"• Buy Tax: 0% | Sell Tax: 3%\n"
+        f"• Liquidity: Locked 1 Year\n"
+        f"• Contract: Verified ✅\n\n"
+        f"<b>🔗 Links:</b>\n"
+        f"• <a href='{WEBSITE}'>🌐 Website</a>\n"
+        f"• <a href='{PANCAKE_BUY}'>💱 Buy</a>\n"
+        f"• <a href='{DEXSCREENER}'>📊 Chart</a>\n"
+        f"• <a href='{TWITTER}'>🐦 Twitter</a>\n"
+        f"• <a href='{TELEGRAM_GRP}'>💬 Telegram</a>",
         disable_web_page_preview=True
     )
 
-async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    add_xp(update.effective_user.id, XP_COMMAND)
-    question = " ".join(ctx.args) if ctx.args else ""
-    if not question:
+async def cmd_links(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_html(
+        f"🔗 <b>HRZ Official Links</b>\n"
+        f"{'━'*22}\n\n"
+        f"🌐 <a href='{WEBSITE}'>Website</a>\n"
+        f"💱 <a href='{PANCAKE_BUY}'>Buy on PancakeSwap</a>\n"
+        f"📊 <a href='{DEXSCREENER}'>DexScreener Chart</a>\n"
+        f"🔍 <a href='{BSCSCAN}'>BscScan</a>\n"
+        f"🔒 <a href='{PINKLOCK}'>Liquidity Lock (PinkLock)</a>\n"
+        f"📱 <a href='{DEXTOOLS}'>DexTools</a>\n"
+        f"🐦 <a href='{TWITTER}'>Twitter @armou224</a>\n"
+        f"💬 <a href='{TELEGRAM_GRP}'>Telegram Group</a>\n"
+        f"🎯 <a href='{COINSNIPER}'>CoinSniper (Vote!)</a>\n"
+        f"💎 <a href='{GEMFINDER}'>GemFinder (Vote!)</a>\n"
+        f"🔍 <a href='{COINHUNT}'>CoinHunt (Vote!)</a>",
+        disable_web_page_preview=True
+    )
+
+async def cmd_roadmap(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_html(
+        f"🗺️ <b>HRZ Roadmap</b>\n"
+        f"{'━'*22}\n\n"
+        f"<b>✅ Phase 1 — Launch (May 2026):</b>\n"
+        f"• Token launch on PancakeSwap\n"
+        f"• Liquidity locked 1 year\n"
+        f"• Community bot deployment\n"
+        f"• Website & socials live\n\n"
+        f"<b>🔄 Phase 2 — Growth:</b>\n"
+        f"• CoinSniper & CoinHunt listing\n"
+        f"• GemFinder listing\n"
+        f"• Community milestones\n"
+        f"• Viral marketing campaign\n\n"
+        f"<b>🚀 Phase 3 — Expansion:</b>\n"
+        f"• CoinGecko listing\n"
+        f"• CoinMarketCap listing\n"
+        f"• KOL partnerships\n"
+        f"• CEX negotiations\n\n"
+        f"<b>👑 Phase 4 — Dominance:</b>\n"
+        f"• Major CEX listing\n"
+        f"• Strategic partnerships\n"
+        f"• Ecosystem development\n\n"
+        f"🌊 <i>The Strait never sleeps. Neither does HRZ!</i>"
+    )
+
+async def cmd_quiz(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if chat_id in _quiz_active:
+        q = _quiz_active[chat_id]
         await update.message.reply_html(
-            "🤖 Usage: <code>/ask your question</code>\n\nExample: <code>/ask Is HRZ safe?</code>"
+            f"⏳ A quiz is already active!\n\n{q['q']}"
         )
         return
-    thinking = await update.message.reply_text("🤖 Thinking...")
-    answer = ask_gemini(question)
-    await thinking.edit_text(answer, parse_mode="HTML", disable_web_page_preview=True)
+    q = random.choice(QUIZ_QUESTIONS)
+    _quiz_active[chat_id] = {**q, "start_time": time.time()}
+    await update.message.reply_html(
+        f"{q['q']}\n\n"
+        f"⏰ <b>First correct answer wins +{q.get('xp', 20)} XP!</b> 🎯"
+    )
+    add_xp(update.effective_user.id, XP_COMMAND)
 
 async def cmd_myxp(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    xp = _xp_store[uid]
-    level = get_level(xp)
-    badges = _badge_store.get(uid, set())
-    badge_text = " ".join([BADGES.get(b, b) for b in badges]) if badges else "None yet"
+    user    = update.effective_user
+    xp      = _xp_store[user.id]
+    level   = get_level(xp)
+    rank    = get_user_rank(user.id)
+    nxt     = get_next_level(xp)
+    badges  = _badge_store.get(user.id, set())
+    refs    = len(_referrals_made.get(user.id, []))
+    nxt_txt = f"Next: {nxt[1]} at {nxt[0]} XP ({nxt[0]-xp} to go)" if nxt else "MAX LEVEL! 🌟"
+    badge_txt = " ".join(badges) if badges else "None yet"
     await update.message.reply_html(
-        f"🎖️ <b>Your HRZ Rank</b>\n\n"
-        f"⚡ XP: <b>{xp}</b>\n"
-        f"🏅 Level: <b>{level}</b>\n"
-        f"🎀 Badges: {badge_text}"
+        f"🎖️ <b>Your HRZ Profile</b>\n"
+        f"{'━'*20}\n\n"
+        f"👤 <b>{user.first_name}</b>\n"
+        f"⭐ Level: <b>{level}</b>\n"
+        f"💫 XP: <b>{xp}</b>\n"
+        f"🏆 Rank: <b>#{rank}</b>\n"
+        f"📈 {nxt_txt}\n"
+        f"🔗 Referrals: <b>{refs}</b>\n"
+        f"🏅 Badges: {badge_txt}\n\n"
+        f"💡 Earn more XP: chat, quiz, vote, daily!\n"
+        f"🔗 Share your referral: /refer"
+    )
+
+async def cmd_daily(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not can_claim_daily(user.id):
+        now      = datetime.now(timezone.utc)
+        tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0)
+        secs     = int((tomorrow - now).total_seconds())
+        h, m     = divmod(secs // 60, 60)
+        await update.message.reply_html(
+            f"⏰ You already claimed your daily XP!\n"
+            f"Next claim in: <b>{h}h {m}m</b>"
+        )
+        return
+    claim_daily(user.id)
+    bonus = random.randint(3, 10)
+    leveled = add_xp(user.id, bonus)
+    await update.message.reply_html(
+        f"🎁 <b>Daily XP Claimed!</b>\n\n"
+        f"✅ You earned <b>+{bonus} XP</b>!\n"
+        f"{'🆙 <b>LEVEL UP!</b> 🎉' if leveled else ''}\n"
+        f"💫 Total XP: <b>{_xp_store[user.id]}</b>\n"
+        f"⭐ Level: <b>{get_level(_xp_store[user.id])}</b>\n\n"
+        f"Come back tomorrow for more! 🌊"
+    )
+
+async def cmd_voted(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user    = update.effective_user
+    today   = datetime.now(timezone.utc).date().isoformat()
+    vote_key= f"voted_{user.id}_{today}"
+    if _daily_claim.get(vote_key):
+        await update.message.reply_html("✅ You already claimed vote XP today!")
+        return
+    _daily_claim[vote_key] = True
+    add_xp(user.id, XP_VOTE)
+    await update.message.reply_html(
+        f"🗳️ <b>Vote XP Claimed!</b>\n\n"
+        f"✅ <b>+{XP_VOTE} XP</b> added for voting!\n"
+        f"💫 Total XP: <b>{_xp_store[user.id]}</b>\n\n"
+        f"🙏 Thank you for supporting HRZ!\n"
+        f"Vote again tomorrow: /voted 🌊"
     )
 
 async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not _xp_store:
-        await update.message.reply_text("🏆 No XP yet — start chatting!")
-        return
     top = sorted(_xp_store.items(), key=lambda x: x[1], reverse=True)[:10]
-    medals = ["🥇","🥈","🥉","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟"]
-    lines = ["🏆 <b>HRZ Leaderboard</b>\n"]
+    if not top:
+        await update.message.reply_html("📋 No XP data yet. Start chatting to earn XP! 🚀")
+        return
+    medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
+    user_id = update.effective_user.id
+    rank    = get_user_rank(user_id)
+    my_xp   = _xp_store[user_id]
+    lines   = [f"<b>🏆 HRZ XP Leaderboard</b>\n{'━'*20}\n"]
     for i, (uid, xp) in enumerate(top):
-        lines.append(f"{medals[i]} <b>{xp} XP</b> — {get_level(xp)}")
+        level = get_level(xp)
+        you   = " ← You!" if uid == user_id else ""
+        lines.append(f"{medals[i]} <b>#{i+1}</b> {level} — <b>{xp} XP</b>{you}")
+    lines.append(f"\n<i>Your rank: #{rank} | Your XP: {my_xp}</i>")
+    lines.append(f"\n💡 Earn XP: chat, quiz, vote, daily, refer!")
     await update.message.reply_html("\n".join(lines))
 
-async def cmd_rules(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_html(
-        "📋 <b>HRZ Community Rules</b>\n\n"
-        "1️⃣ No spam or external links\n"
-        "2️⃣ No FUD or scam accusations\n"
-        "3️⃣ Respect all members\n"
-        "4️⃣ English only\n"
-        "5️⃣ No unsolicited DMs\n"
-        "6️⃣ DYOR — Not financial advice\n\n"
-        "⚠️ Violations: Warning → Mute → Ban"
+async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not ctx.args:
+        await update.message.reply_html(
+            "💡 Usage: <code>/ask [your question]</code>\n\n"
+            "Example: <code>/ask what is HRZ?</code>"
+        )
+        return
+    if not can_reply_to_user(user.id):
+        await update.message.reply_text("⏳ Please wait 2 minutes before asking again.")
+        return
+    q = " ".join(ctx.args)
+    msg = await update.message.reply_text("🤔 Thinking...")
+    answer = ask_gemini(q, max_tokens=500)
+    add_xp(user.id, XP_COMMAND)
+    await msg.edit_text(
+        f"🤖 <b>HRZ AI Answer:</b>\n\n{answer}",
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True
     )
 
-async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+async def cmd_suggest(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not ctx.args:
+        await update.message.reply_html(
+            "💡 Usage: <code>/suggest [your idea]</code>\n\n"
+            "Example: <code>/suggest add NFT badge system</code>"
+        )
+        return
+    idea = " ".join(ctx.args)
+    _suggestion_store.append({
+        "user_id": update.effective_user.id,
+        "idea": idea,
+        "time": datetime.now(timezone.utc).isoformat()
+    })
+    add_xp(update.effective_user.id, 3)
     await update.message.reply_html(
-        "<b>📋 HRZ Bot — All Commands</b>\n\n"
-        "/price — Live price\n/ath — All-time high\n"
-        "/buy — How to buy\n/contract — Contract\n"
-        "/info — About HRZ\n/rules — Rules\n"
-        "/vote — Vote (+XP)\n/shill — Promo message\n"
-        "/ask [q] — Ask AI\n/myxp — Your XP\n"
-        "/leaderboard — Top 10\n\n"
-        "<b>Admin:</b>\n"
-        "/warn /mute /unmute /ban\n"
-        "/slowmode /lockdown\n"
-        "/schedule /stopschedule"
+        f"💡 <b>Suggestion Submitted!</b>\n\n"
+        f"📝 Your idea: <i>{idea}</i>\n\n"
+        f"✅ +3 XP earned for contributing!\n"
+        f"Thank you for helping build HRZ! 🌊"
     )
 
-# ── ADMIN COMMANDS ────────────────────────────────────────────────────────────
-
-async def is_admin(update, ctx):
+# ── PRICE ALERT COMMANDS
+async def cmd_alert(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not ctx.args or len(ctx.args) < 2:
+        await update.message.reply_html(
+            f"🔔 <b>Price Alert Setup</b>\n\n"
+            f"Usage: <code>/alert [price] [above/below]</code>\n\n"
+            f"Examples:\n"
+            f"• <code>/alert 0.000001 above</code> — Alert when price goes above\n"
+            f"• <code>/alert 0.0000005 below</code> — Alert when price drops below\n\n"
+            f"I'll send you a private message when triggered! 🔔"
+        )
+        return
     try:
-        member = await ctx.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
-        return member.status in ("administrator", "creator")
-    except Exception:
-        return False
+        target    = float(ctx.args[0])
+        direction = ctx.args[1].lower()
+        if direction not in ("above", "below"):
+            raise ValueError()
+    except (ValueError, IndexError):
+        await update.message.reply_html("❌ Invalid format. Use: <code>/alert 0.000001 above</code>")
+        return
+    if len(_price_alerts[user.id]) >= 5:
+        await update.message.reply_html(
+            "⚠️ You can set max 5 alerts. Use /cancelalert to remove one first."
+        )
+        return
+    _price_alerts[user.id].append({
+        "target":    target,
+        "direction": direction,
+        "chat_id":   update.effective_chat.id
+    })
+    arrow = "📈" if direction == "above" else "📉"
+    await update.message.reply_html(
+        f"🔔 <b>Price Alert Set!</b>\n\n"
+        f"{arrow} Alert when HRZ goes <b>{direction}</b> <code>${target:.10f}</code>\n\n"
+        f"I'll notify you privately when triggered!\n"
+        f"Use /myalerts to view your alerts."
+    )
+
+async def cmd_myalerts(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user   = update.effective_user
+    alerts = _price_alerts.get(user.id, [])
+    if not alerts:
+        await update.message.reply_html(
+            "🔕 You have no active price alerts.\n"
+            "Set one with: <code>/alert 0.000001 above</code>"
+        )
+        return
+    lines = ["🔔 <b>Your Active Price Alerts:</b>\n"]
+    for i, a in enumerate(alerts, 1):
+        arrow = "📈" if a["direction"] == "above" else "📉"
+        lines.append(f"{i}. {arrow} {a['direction'].title()} <code>${a['target']:.10f}</code>")
+    lines.append(f"\n💡 Use /cancelalert [number] to remove one.")
+    await update.message.reply_html("\n".join(lines))
+
+async def cmd_cancelalert(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user   = update.effective_user
+    alerts = _price_alerts.get(user.id, [])
+    if not alerts:
+        await update.message.reply_html("🔕 You have no active alerts to cancel.")
+        return
+    if not ctx.args:
+        await update.message.reply_html(
+            f"❌ Usage: <code>/cancelalert [number]</code>\n\n"
+            f"You have {len(alerts)} alert(s). Use /myalerts to see them."
+        )
+        return
+    try:
+        idx = int(ctx.args[0]) - 1
+        if idx < 0 or idx >= len(alerts):
+            raise ValueError()
+    except ValueError:
+        await update.message.reply_html("❌ Invalid alert number.")
+        return
+    removed = _price_alerts[user.id].pop(idx)
+    arrow   = "📈" if removed["direction"] == "above" else "📉"
+    await update.message.reply_html(
+        f"✅ Alert removed!\n\n"
+        f"{arrow} {removed['direction'].title()} ${removed['target']:.10f}"
+    )
+
+# ── REFERRAL COMMANDS
+async def cmd_refer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    code = get_referral_code(user.id)
+    refs = len(_referrals_made.get(user.id, []))
+    bot_info = await ctx.bot.get_me()
+    link = f"https://t.me/{bot_info.username}?start=ref_{code}"
+    await update.message.reply_html(
+        f"🔗 <b>Your Referral Link</b>\n"
+        f"{'━'*20}\n\n"
+        f"Share this link to earn <b>+{XP_REFERRAL} XP</b> per referral!\n\n"
+        f"<code>{link}</code>\n\n"
+        f"📊 Your Stats:\n"
+        f"• Referrals made: <b>{refs}</b>\n"
+        f"• XP earned from referrals: <b>{refs * XP_REFERRAL}</b>\n\n"
+        f"💡 Your referral also gets <b>+5 XP</b> when they join!\n"
+        f"🚀 Invite friends to grow the HRZ community!"
+    )
+
+# ── SENTIMENT COMMANDS
+async def cmd_sentiment(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    today   = datetime.now(timezone.utc).date().isoformat()
+    data    = _sentiment_votes.get(chat_id, {})
+    if not data or data.get("date") != today:
+        _sentiment_votes[chat_id] = {
+            "bullish": set(), "bearish": set(),
+            "date": today, "msg_id": None
+        }
+    d = fetch_hrz_price()
+    price_str = f"${float(d['price_usd']):.10f}" if d else "N/A"
+    bull_count = len(_sentiment_votes[chat_id]["bullish"])
+    bear_count = len(_sentiment_votes[chat_id]["bearish"])
+    total = bull_count + bear_count
+    bull_pct = int(bull_count / total * 100) if total > 0 else 50
+    bear_pct = 100 - bull_pct
+    msg = await update.message.reply_html(
+        f"📡 <b>Community Sentiment</b>\n\n"
+        f"💵 Current Price: <b>{price_str}</b>\n\n"
+        f"How do you feel about $HRZ today?\n\n"
+        f"🟢 Bullish: <b>{bull_count}</b> ({bull_pct}%)\n"
+        f"🔴 Bearish: <b>{bear_count}</b> ({bear_pct}%)\n\n"
+        f"Vote below and earn +{XP_VOTE} XP! 🎯",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton(f"🟢 Bullish 🚀 ({bull_count})", callback_data="sentiment_bull"),
+            InlineKeyboardButton(f"🔴 Bearish 📉 ({bear_count})", callback_data="sentiment_bear"),
+        ]])
+    )
+    _sentiment_votes[chat_id]["msg_id"] = msg.message_id
+
+# ── GIVEAWAY COMMANDS (Admin)
+async def cmd_startgiveaway(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user    = update.effective_user
+    chat_id = update.effective_chat.id
+    # Check admin
+    member  = await ctx.bot.get_chat_member(chat_id, user.id)
+    if member.status not in ("creator", "administrator"):
+        await update.message.reply_text("❌ Admin only command.")
+        return
+    if chat_id in _giveaway_active:
+        await update.message.reply_html("⚠️ A giveaway is already active! Use /endgiveaway first.")
+        return
+    try:
+        prize_xp = int(ctx.args[0]) if ctx.args else 100
+        duration = int(ctx.args[1]) if len(ctx.args) > 1 else 30  # minutes
+    except (ValueError, IndexError):
+        prize_xp, duration = 100, 30
+    end_time = time.time() + duration * 60
+    _giveaway_active[chat_id] = {
+        "prize_xp": prize_xp,
+        "entries":  set(),
+        "end_time": end_time,
+        "msg_id":   None
+    }
+    msg = await update.message.reply_html(
+        f"🎰 <b>GIVEAWAY STARTED!</b> 🎰\n\n"
+        f"🏆 Prize: <b>{prize_xp} XP</b>\n"
+        f"⏰ Duration: <b>{duration} minutes</b>\n\n"
+        f"Click the button below to enter!\n"
+        f"👇 Good luck to everyone! 🍀",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🎰 Enter Giveaway!", callback_data="giveaway_enter")
+        ]])
+    )
+    _giveaway_active[chat_id]["msg_id"] = msg.message_id
+    ctx.job_queue.run_once(
+        end_giveaway,
+        when=duration * 60,
+        chat_id=chat_id,
+        name=f"giveaway_{chat_id}"
+    )
+
+async def cmd_endgiveaway(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user    = update.effective_user
+    chat_id = update.effective_chat.id
+    member  = await ctx.bot.get_chat_member(chat_id, user.id)
+    if member.status not in ("creator", "administrator"):
+        await update.message.reply_text("❌ Admin only.")
+        return
+    if chat_id not in _giveaway_active:
+        await update.message.reply_text("❌ No active giveaway.")
+        return
+    # Remove scheduled job and end manually
+    for job in ctx.job_queue.get_jobs_by_name(f"giveaway_{chat_id}"):
+        job.schedule_removal()
+    await end_giveaway(type("obj", (), {"job": type("j", (), {"chat_id": chat_id})(), "bot": ctx.bot})())
+
+# ── ADMIN COMMANDS
+async def cmd_schedule(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    global _ath_alerted
+    user    = update.effective_user
+    chat_id = update.effective_chat.id
+    member  = await ctx.bot.get_chat_member(chat_id, user.id)
+    if member.status not in ("creator", "administrator"):
+        await update.message.reply_text("❌ Admin only.")
+        return
+    d = fetch_hrz_price()
+    if d:
+        _ath_alerted = float(d["price_usd"] or 0)
+    name = str(chat_id)
+    jobs = [
+        (scheduled_post,      POST_INTERVAL,        10,   f"post_{name}"),
+        (scheduled_quiz,      QUIZ_INTERVAL,         120,  f"quiz_{name}"),
+        (buy_bot_tick,        BUY_BOT_INTERVAL,      5,    f"buybot_{name}"),
+        (vote_reminder,       VOTE_INTERVAL,         3600, f"vote_{name}"),
+        (daily_report,        REPORT_INTERVAL,       7200, f"report_{name}"),
+        (ath_check_tick,      ATH_CHECK,             30,   f"ath_{name}"),
+        (post_to_channel,     POST_INTERVAL,         15,   f"channel_{name}"),
+        (sentiment_post,      SENTIMENT_INTERVAL,    1800, f"sentiment_{name}"),
+        (post_leaderboard,    LEADERBOARD_INTERVAL,  900,  f"lb_{name}"),
+        (price_alert_tick,    60,                    20,   f"alerts_{name}"),
+        (anti_raid_check,     30,                    10,   f"raid_{name}"),
+    ]
+    for func, interval, first, job_name in jobs:
+        ctx.job_queue.run_repeating(
+            func, interval=interval, first=first,
+            chat_id=chat_id, name=job_name
+        )
+    await update.message.reply_html(
+        f"✅ <b>HRZ Bot v8 — Fully Activated!</b>\n\n"
+        f"📢 Auto-posts: every <b>20 min</b>\n"
+        f"🧠 Quiz: every <b>1 hour</b>\n"
+        f"🟢 Buy alerts: every <b>30 sec</b>\n"
+        f"🏆 ATH detection: every <b>5 min</b>\n"
+        f"🗳️ Vote reminder: every <b>24 hours</b>\n"
+        f"📊 Daily report: every <b>24 hours</b>\n"
+        f"📡 Sentiment vote: every <b>6 hours</b>\n"
+        f"🏅 Leaderboard: every <b>12 hours</b>\n"
+        f"🔔 Price alerts: every <b>1 min</b>\n"
+        f"🛡️ Anti-raid: every <b>30 sec</b>\n"
+        f"📺 Channel posts: every <b>20 min</b>\n\n"
+        f"🌊 <b>The Strait is now ONLINE!</b>"
+    )
+
+async def cmd_stopschedule(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user    = update.effective_user
+    chat_id = update.effective_chat.id
+    member  = await ctx.bot.get_chat_member(chat_id, user.id)
+    if member.status not in ("creator", "administrator"):
+        await update.message.reply_text("❌ Admin only.")
+        return
+    name    = str(chat_id)
+    count   = 0
+    prefixes= ("post_","quiz_","buybot_","vote_","report_","ath_",
+               "channel_","sentiment_","lb_","alerts_","raid_")
+    for prefix in prefixes:
+        for job in ctx.job_queue.get_jobs_by_name(f"{prefix}{name}"):
+            job.schedule_removal()
+            count += 1
+    await update.message.reply_text(f"🛑 Stopped {count} auto-jobs.")
+
+async def cmd_botstats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user   = update.effective_user
+    chat_id= update.effective_chat.id
+    member = await ctx.bot.get_chat_member(chat_id, user.id)
+    if member.status not in ("creator", "administrator"):
+        await update.message.reply_text("❌ Admin only.")
+        return
+    total_xp_users  = len(_xp_store)
+    total_xp        = sum(_xp_store.values())
+    total_alerts    = sum(len(v) for v in _price_alerts.values())
+    total_referrals = sum(len(v) for v in _referrals_made.values())
+    suggestions     = len(_suggestion_store)
+    sentiment_data  = _sentiment_votes.get(chat_id, {})
+    bull = len(sentiment_data.get("bullish", set()))
+    bear = len(sentiment_data.get("bearish", set()))
+    await update.message.reply_html(
+        f"🤖 <b>Bot Statistics</b>\n"
+        f"{'━'*20}\n\n"
+        f"⏱️ Uptime: <b>{uptime_str()}</b>\n"
+        f"📢 Total Posts: <b>{_total_posts}</b>\n"
+        f"👥 XP Users: <b>{total_xp_users}</b>\n"
+        f"💫 Total XP: <b>{total_xp}</b>\n"
+        f"🔔 Active Alerts: <b>{total_alerts}</b>\n"
+        f"🔗 Total Referrals: <b>{total_referrals}</b>\n"
+        f"💡 Suggestions: <b>{suggestions}</b>\n"
+        f"📡 Sentiment: 🟢{bull} / 🔴{bear}\n\n"
+        f"🌊 Bot v8 — Running strong!"
+    )
 
 async def cmd_warn(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, ctx):
-        await update.message.reply_text("❌ Admins only.")
+    user    = update.effective_user
+    chat_id = update.effective_chat.id
+    member  = await ctx.bot.get_chat_member(chat_id, user.id)
+    if member.status not in ("creator", "administrator"):
         return
     if not update.message.reply_to_message:
-        await update.message.reply_text("⚠️ Reply to a message to warn.")
+        await update.message.reply_text("⚠️ Reply to a user to warn them.")
         return
-    target = update.message.reply_to_message.from_user
-    reason = " ".join(ctx.args) if ctx.args else "No reason"
+    target    = update.message.reply_to_message.from_user
+    reason    = " ".join(ctx.args) if ctx.args else "Violation of group rules"
     _warn_store[target.id] += 1
-    warns = _warn_store[target.id]
-    if warns >= 3:
+    warns     = _warn_store[target.id]
+    if warns >= MAX_WARNS_BEFORE_BAN:
         try:
-            await ctx.bot.ban_chat_member(update.effective_chat.id, target.id)
-            await update.message.reply_html(f"🚫 <b>{target.full_name}</b> BANNED after 3 warnings!")
-        except Exception as e:
-            await update.message.reply_text(f"❌ Cannot ban: {e}")
+            await ctx.bot.ban_chat_member(chat_id, target.id)
+        except Exception:
+            pass
+        await update.message.reply_html(
+            f"🔨 <b>{target.first_name}</b> has been banned after {warns} warnings!\n"
+            f"Reason: {reason}"
+        )
     else:
-        await update.message.reply_html(f"⚠️ Warning {warns}/3 — {target.full_name}\nReason: {reason}")
+        await update.message.reply_html(
+            f"⚠️ <b>Warning {warns}/{MAX_WARNS_BEFORE_BAN}</b> — {target.mention_html()}\n"
+            f"Reason: {reason}\n\n"
+            f"{'One more warning = BAN!' if warns == MAX_WARNS_BEFORE_BAN - 1 else ''}"
+        )
 
 async def cmd_mute(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, ctx):
-        await update.message.reply_text("❌ Admins only.")
+    user    = update.effective_user
+    chat_id = update.effective_chat.id
+    member  = await ctx.bot.get_chat_member(chat_id, user.id)
+    if member.status not in ("creator", "administrator"):
         return
     if not update.message.reply_to_message:
-        await update.message.reply_text("⚠️ Reply to mute.")
+        await update.message.reply_text("🔇 Reply to a user to mute them.")
         return
-    target = update.message.reply_to_message.from_user
-    duration = int(ctx.args[0]) if ctx.args else 60
-    until = datetime.now(timezone.utc) + timedelta(minutes=duration)
+    target   = update.message.reply_to_message.from_user
+    mins     = int(ctx.args[0]) if ctx.args else MUTE_DEFAULT_MINS
+    until    = datetime.now(timezone.utc) + timedelta(minutes=mins)
     try:
         await ctx.bot.restrict_chat_member(
-            update.effective_chat.id, target.id,
-            permissions=ChatPermissions(can_send_messages=False), until_date=until
+            chat_id, target.id,
+            permissions=ChatPermissions(can_send_messages=False),
+            until_date=until
         )
-        await update.message.reply_html(f"🔇 <b>{target.full_name}</b> muted for {duration} minutes.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Cannot mute: {e}")
-
-async def cmd_unmute(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, ctx):
-        await update.message.reply_text("❌ Admins only.")
-        return
-    if not update.message.reply_to_message:
-        await update.message.reply_text("⚠️ Reply to unmute.")
-        return
-    target = update.message.reply_to_message.from_user
-    try:
-        await ctx.bot.restrict_chat_member(
-            update.effective_chat.id, target.id,
-            permissions=ChatPermissions(can_send_messages=True, can_send_media_messages=True)
+        await update.message.reply_html(
+            f"🔇 <b>{target.first_name}</b> muted for <b>{mins} minutes</b>."
         )
-        await update.message.reply_html(f"🔊 <b>{target.full_name}</b> unmuted.")
     except Exception as e:
-        await update.message.reply_text(f"❌ Cannot unmute: {e}")
+        await update.message.reply_text(f"❌ Mute failed: {e}")
 
 async def cmd_ban(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, ctx):
-        await update.message.reply_text("❌ Admins only.")
+    user    = update.effective_user
+    chat_id = update.effective_chat.id
+    member  = await ctx.bot.get_chat_member(chat_id, user.id)
+    if member.status not in ("creator", "administrator"):
         return
     if not update.message.reply_to_message:
-        await update.message.reply_text("⚠️ Reply to ban.")
+        await update.message.reply_text("🔨 Reply to a user to ban them.")
         return
     target = update.message.reply_to_message.from_user
-    reason = " ".join(ctx.args) if ctx.args else "No reason"
+    reason = " ".join(ctx.args) if ctx.args else "Violation of group rules"
     try:
-        await ctx.bot.ban_chat_member(update.effective_chat.id, target.id)
-        await update.message.reply_html(f"🚫 <b>{target.full_name}</b> BANNED. Reason: {reason}")
+        await ctx.bot.ban_chat_member(chat_id, target.id)
+        await update.message.reply_html(
+            f"🔨 <b>{target.first_name}</b> has been banned!\n"
+            f"Reason: {reason}"
+        )
     except Exception as e:
-        await update.message.reply_text(f"❌ Cannot ban: {e}")
+        await update.message.reply_text(f"❌ Ban failed: {e}")
 
-async def cmd_slowmode(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, ctx):
-        await update.message.reply_text("❌ Admins only.")
+async def cmd_announce(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user    = update.effective_user
+    chat_id = update.effective_chat.id
+    member  = await ctx.bot.get_chat_member(chat_id, user.id)
+    if member.status not in ("creator", "administrator"):
         return
-    seconds = int(ctx.args[0]) if ctx.args else 0
-    try:
-        await ctx.bot.set_chat_slow_mode_delay(update.effective_chat.id, seconds)
-        await update.message.reply_html(f"🐢 Slow mode: <b>{seconds}s</b>" if seconds else "✅ Slow mode disabled")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
-
-async def cmd_lockdown(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    global _lockdown
-    if not await is_admin(update, ctx):
-        await update.message.reply_text("❌ Admins only.")
+    if not ctx.args:
+        await update.message.reply_text("📢 Usage: /announce [message]")
         return
-    _lockdown = not _lockdown
-    msg = "🔒 <b>LOCKDOWN ACTIVATED!</b>" if _lockdown else "🔓 <b>Lockdown lifted!</b>"
-    await update.message.reply_html(msg)
+    text = " ".join(ctx.args)
+    await ctx.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            f"📢 <b>Official HRZ Announcement</b>\n"
+            f"{'━'*25}\n\n"
+            f"{text}\n\n"
+            f"— <i>HRZ Team</i> 🌊"
+        ),
+        parse_mode=ParseMode.HTML
+    )
 
-# ── WELCOME & MESSAGE HANDLER ─────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════
+# ── CALLBACK HANDLER
+# ════════════════════════════════════════════════════════════════════
+
+async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q       = update.callback_query
+    user    = q.from_user
+    chat_id = q.message.chat_id
+    data    = q.data
+    await q.answer()
+
+    # ── Price
+    if data == "price":
+        d = fetch_hrz_price(force=True)
+        if d:
+            await q.message.edit_text(
+                price_text(d),
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+                reply_markup=buy_keyboard()
+            )
+        else:
+            await q.answer("❌ Price unavailable", show_alert=True)
+
+    # ── ATH
+    elif data == "ath":
+        ath = _ath_store
+        d   = fetch_hrz_price()
+        cur = float(d["price_usd"] or 0) if d else 0
+        diff= ((cur - ath["price"]) / ath["price"] * 100) if ath["price"] > 0 else 0
+        await q.message.reply_html(
+            f"🏆 ATH: <b>${ath['price']:.10f}</b>\n"
+            f"📅 {ath.get('date','Unknown')}\n"
+            f"💵 Now: <b>${cur:.10f}</b>\n"
+            f"📉 From ATH: <b>{diff:+.2f}%</b>"
+        )
+
+    # ── Stats
+    elif data == "stats":
+        d = fetch_hrz_price(force=True)
+        if d:
+            vol = float(d["volume_24h"] or 0)
+            liq = float(d["liquidity"]  or 0)
+            c24 = float(d["change_24h"] or 0)
+            await q.message.reply_html(
+                f"📊 <b>HRZ Quick Stats</b>\n\n"
+                f"📊 Vol 24h: <b>${vol:,.2f}</b>\n"
+                f"💧 Liquidity: <b>${liq:,.2f}</b>\n"
+                f"📈 24h: <b>{c24:+.2f}%</b>\n"
+                f"🔄 Buys/Sells: <b>{d['txns_buys']}/{d['txns_sells']}</b>\n"
+                f"📡 Trend: {get_market_trend(d)}"
+            )
+
+    # ── Fear & Greed
+    elif data == "feargreed":
+        fg    = fetch_fear_greed()
+        value = int(fg["value"]) if str(fg["value"]).isdigit() else 50
+        bar   = "█" * (value // 10) + "░" * (10 - value // 10)
+        await q.message.reply_html(
+            f"😱 <b>Fear & Greed: {fg['value']} ({fg['label']})</b>\n\n"
+            f"[{bar}] {value}/100\n\n"
+            f"{'📉 Buy opportunity!' if value <= 30 else '📈 Be cautious!' if value >= 80 else '⚖️ Balanced market.'}"
+        )
+
+    # ── Contract
+    elif data == "contract":
+        await q.message.reply_html(
+            f"📋 <b>HRZ Contract</b>\n\n"
+            f"<code>{HRZ_CONTRACT}</code>\n\n"
+            f"✅ Verified | 🔒 Locked | 🌐 BNB Chain\n"
+            f"<a href='{BSCSCAN}'>View on BscScan</a>"
+        )
+
+    # ── My XP
+    elif data == "myxp":
+        xp    = _xp_store[user.id]
+        level = get_level(xp)
+        rank  = get_user_rank(user.id)
+        nxt   = get_next_level(xp)
+        nxt_t = f"Next: {nxt[1]} at {nxt[0]} XP" if nxt else "MAX LEVEL! 🌟"
+        await q.message.reply_html(
+            f"🎖️ <b>{user.first_name}'s Profile</b>\n\n"
+            f"⭐ Level: <b>{level}</b>\n"
+            f"💫 XP: <b>{xp}</b>\n"
+            f"🏆 Rank: <b>#{rank}</b>\n"
+            f"📈 {nxt_t}"
+        )
+
+    # ── Daily XP
+    elif data == "daily":
+        if not can_claim_daily(user.id):
+            await q.answer("⏰ Already claimed today! Come back tomorrow.", show_alert=True)
+            return
+        claim_daily(user.id)
+        bonus   = random.randint(3, 10)
+        leveled = add_xp(user.id, bonus)
+        await q.answer(
+            f"🎁 +{bonus} XP claimed! {'LEVEL UP! 🎉' if leveled else ''}",
+            show_alert=True
+        )
+
+    # ── Leaderboard
+    elif data == "leaderboard":
+        top    = sorted(_xp_store.items(), key=lambda x: x[1], reverse=True)[:5]
+        medals = ["🥇", "🥈", "🥉", "🏅", "🏅"]
+        lines  = ["🏆 <b>Top 5 XP Holders:</b>\n"]
+        for i, (uid, xp) in enumerate(top):
+            lines.append(f"{medals[i]} #{i+1} — {get_level(xp)} — <b>{xp} XP</b>")
+        await q.message.reply_html("\n".join(lines))
+
+    # ── About
+    elif data == "about":
+        await q.message.reply_html(
+            f"🌊 <b>Hormuz (HRZ)</b>\n\n"
+            f"Inspired by the world's most strategic waterway.\n"
+            f"BNB Chain | 0% Buy Tax | 1yr Locked Liq\n\n"
+            f"<a href='{WEBSITE}'>🌐 Website</a> | <a href='{PANCAKE_BUY}'>💱 Buy</a>",
+            disable_web_page_preview=True
+        )
+
+    # ── Back
+    elif data == "back":
+        await q.message.edit_reply_markup(reply_markup=main_keyboard())
+
+    # ── Referral Info
+    elif data == "referral":
+        code = get_referral_code(user.id)
+        refs = len(_referrals_made.get(user.id, []))
+        bot_info = await ctx.bot.get_me()
+        link = f"https://t.me/{bot_info.username}?start=ref_{code}"
+        await q.message.reply_html(
+            f"🔗 <b>Your Referral Link:</b>\n\n"
+            f"<code>{link}</code>\n\n"
+            f"📊 Referrals made: <b>{refs}</b>\n"
+            f"💫 XP earned: <b>{refs * XP_REFERRAL}</b>\n\n"
+            f"Share to earn +{XP_REFERRAL} XP per person!"
+        )
+
+    # ── Giveaway Info
+    elif data == "giveaway_info":
+        giveaway = _giveaway_active.get(chat_id)
+        if giveaway:
+            entries  = len(giveaway["entries"])
+            prize    = giveaway["prize_xp"]
+            secs_left= max(0, int(giveaway["end_time"] - time.time()))
+            mins, s  = divmod(secs_left, 60)
+            you_in   = "✅ You're IN!" if user.id in giveaway["entries"] else "❌ Not entered yet"
+            await q.message.reply_html(
+                f"🎰 <b>Active Giveaway!</b>\n\n"
+                f"🏆 Prize: <b>{prize} XP</b>\n"
+                f"👥 Entries: <b>{entries}</b>\n"
+                f"⏰ Time left: <b>{mins}m {s}s</b>\n"
+                f"Your status: {you_in}\n\n"
+                f"Click /giveaway to enter!",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🎰 Enter!", callback_data="giveaway_enter")
+                ]])
+            )
+        else:
+            await q.answer("No active giveaway right now. Stay tuned! 🎰", show_alert=True)
+
+    # ── Giveaway Enter
+    elif data == "giveaway_enter":
+        giveaway = _giveaway_active.get(chat_id)
+        if not giveaway:
+            await q.answer("No active giveaway!", show_alert=True)
+            return
+        if user.id in giveaway["entries"]:
+            await q.answer("✅ You're already in! Good luck! 🍀", show_alert=True)
+            return
+        giveaway["entries"].add(user.id)
+        entries = len(giveaway["entries"])
+        await q.answer(f"🎰 Entered! You're #{entries} in the giveaway! Good luck! 🍀", show_alert=True)
+        try:
+            await q.message.edit_reply_markup(
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton(f"🎰 Enter! ({entries} entries)", callback_data="giveaway_enter")
+                ]])
+            )
+        except Exception:
+            pass
+
+    # ── Sentiment Voting
+    elif data in ("sentiment_bull", "sentiment_bear"):
+        today = datetime.now(timezone.utc).date().isoformat()
+        if chat_id not in _sentiment_votes or _sentiment_votes[chat_id].get("date") != today:
+            _sentiment_votes[chat_id] = {
+                "bullish": set(), "bearish": set(),
+                "date": today, "msg_id": None
+            }
+        sv = _sentiment_votes[chat_id]
+        already_voted = user.id in sv["bullish"] or user.id in sv["bearish"]
+        if already_voted:
+            await q.answer("✅ Already voted today! Come back tomorrow.", show_alert=True)
+            return
+        if data == "sentiment_bull":
+            sv["bullish"].add(user.id)
+            choice = "🟢 Bullish"
+        else:
+            sv["bearish"].add(user.id)
+            choice = "🔴 Bearish"
+        add_xp(user.id, XP_VOTE)
+        bull = len(sv["bullish"])
+        bear = len(sv["bearish"])
+        total= bull + bear
+        bull_pct = int(bull / total * 100) if total > 0 else 50
+        bear_pct = 100 - bull_pct
+        await q.answer(f"✅ Voted {choice}! +{XP_VOTE} XP earned! 🎯", show_alert=True)
+        try:
+            await q.message.edit_reply_markup(
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton(f"🟢 Bullish ({bull_pct}%)", callback_data="sentiment_bull"),
+                    InlineKeyboardButton(f"🔴 Bearish ({bear_pct}%)", callback_data="sentiment_bear"),
+                ]])
+            )
+        except Exception:
+            pass
+
+    # ── Sentiment Info
+    elif data == "sentiment_info":
+        today = datetime.now(timezone.utc).date().isoformat()
+        data_s= _sentiment_votes.get(chat_id, {})
+        bull  = len(data_s.get("bullish", set()))
+        bear  = len(data_s.get("bearish", set()))
+        total = bull + bear
+        bp    = int(bull / total * 100) if total > 0 else 50
+        await q.message.reply_html(
+            f"📡 <b>Today's Sentiment</b>\n\n"
+            f"🟢 Bullish: <b>{bull}</b> ({bp}%)\n"
+            f"🔴 Bearish: <b>{bear}</b> ({100-bp}%)\n\n"
+            f"Vote with /sentiment to earn XP! 🎯"
+        )
+
+    # ── Safety
+    elif data == "safety":
+        await q.message.reply_html(
+            f"🛡️ <b>HRZ Safety Checklist</b>\n\n"
+            f"✅ Contract verified on BscScan\n"
+            f"✅ Liquidity locked 1 year on PinkLock\n"
+            f"✅ 0% buy tax — no hidden fees\n"
+            f"✅ Open source tokenomics\n"
+            f"✅ Active dev & community\n"
+            f"✅ Anti-bot measures in place\n\n"
+            f"<a href='{BSCSCAN}'>🔍 Verify Contract</a> | "
+            f"<a href='{PINKLOCK}'>🔒 Check Lock</a>",
+            disable_web_page_preview=True
+        )
+
+    # ── Shill
+    elif data == "shill":
+        shill_text = (
+            f"🌊 <b>$HRZ — Hormuz Token</b>\n\n"
+            f"Inspired by the world's most strategic strait "
+            f"controlling 20% of global oil! 🛢️\n\n"
+            f"✅ 0% Buy Tax\n"
+            f"🔒 1yr Locked Liquidity\n"
+            f"📋 Verified Contract\n"
+            f"🌐 BNB Chain\n\n"
+            f"💱 Buy: {PANCAKE_BUY}\n"
+            f"📊 Chart: {DEXSCREENER}\n"
+            f"🐦 Twitter: {TWITTER}\n\n"
+            f"#HRZ #Hormuz #BNBChain #GEM 🔥"
+        )
+        await q.message.reply_html(shill_text, disable_web_page_preview=True)
+
+# ════════════════════════════════════════════════════════════════════
+# ── MESSAGE HANDLER
+# ════════════════════════════════════════════════════════════════════
 
 async def welcome_member(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
     for member in update.message.new_chat_members:
         if member.is_bot:
             continue
-        name = member.full_name.replace("<", "&lt;").replace(">", "&gt;")
-        add_xp(member.id, XP_MESSAGE)
-        add_badge(member.id, "early_holder")
-        d = fetch_hrz_price()
-        price = f"${float(d['price_usd']):.10f}" if d else "Check /price"
+        # Anti-raid check
+        now = time.time()
+        _join_timestamps[chat_id].append(now)
+        # Clean old timestamps
+        _join_timestamps[chat_id] = [t for t in _join_timestamps[chat_id] if now - t < ANTI_RAID_WINDOW]
+        if len(_join_timestamps[chat_id]) >= ANTI_RAID_THRESHOLD and not _raid_mode.get(chat_id):
+            _raid_mode[chat_id]       = True
+            _raid_mode_until[chat_id] = now + 300  # 5 minutes
+            try:
+                await ctx.bot.set_chat_permissions(
+                    chat_id=chat_id,
+                    permissions=ChatPermissions(can_send_messages=False)
+                )
+                await ctx.bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        f"🚨 <b>ANTI-RAID MODE ACTIVATED!</b> 🚨\n\n"
+                        f"⚠️ Unusual join activity detected!\n"
+                        f"🔒 Group locked for <b>5 minutes</b>.\n"
+                        f"Restrictions will be lifted automatically."
+                    ),
+                    parse_mode=ParseMode.HTML
+                )
+            except Exception as e:
+                logger.error(f"Anti-raid activation error: {e}")
+            continue
+        if _raid_mode.get(chat_id):
+            continue
+        # Normal welcome
         try:
-            await update.message.reply_html(
-                f"🌊 Welcome <b>{name}</b> to Hormuz (HRZ)!\n\n"
-                f"💵 Price: <b>{price}</b>\n"
-                f"🎖️ Early Holder badge earned!\n\n"
-                f"/buy — How to buy | /help — Commands\n\n"
-                f"<a href='{PANCAKE_BUY}'>💱 Buy HRZ</a> | <a href='{DEXSCREENER}'>📊 Chart</a>",
-                disable_web_page_preview=True
+            await ctx.bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"🌊 <b>Welcome to HRZ, {member.first_name}!</b>\n\n"
+                    f"🚀 You've joined the official Hormuz (HRZ) community!\n\n"
+                    f"<b>Quick Start:</b>\n"
+                    f"💰 /price — Live price\n"
+                    f"💱 /buy — How to buy\n"
+                    f"🎖️ /myxp — Your XP level\n"
+                    f"🔗 /refer — Earn with referrals\n"
+                    f"🔔 /alert — Set price alert\n\n"
+                    f"💡 Chat to earn XP and climb the leaderboard!\n"
+                    f"🌊 <i>The Strait awaits!</i>"
+                ),
+                parse_mode=ParseMode.HTML,
+                reply_markup=main_keyboard()
             )
         except Exception as e:
-            logger.error(f"Welcome: {e}")
+            logger.error(f"Welcome error: {e}")
 
 async def message_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
-    text = update.message.text
-    if update.channel_post or update.edited_channel_post:
-        return
-    chat_type = update.effective_chat.type
-    if not update.effective_user or update.effective_user.is_bot:
-        return
-    uid = update.effective_user.id
+    user    = update.effective_user
     chat_id = update.effective_chat.id
+    text    = update.message.text
 
-    admin = False
-    if chat_type in ("group", "supergroup"):
-        try:
-            member = await ctx.bot.get_chat_member(chat_id, uid)
-            admin = member.status in ("administrator", "creator")
-        except Exception:
-            pass
-
-    if _lockdown and not admin:
+    # Lockdown check
+    if _lockdown:
         try:
             await update.message.delete()
         except Exception:
             pass
         return
 
-    if not admin:
-        if is_spam(text):
-            try:
-                await update.message.delete()
-                _warn_store[uid] += 1
-                await ctx.bot.send_message(
-                    chat_id,
-                    f"🚫 No external links! Warning {_warn_store[uid]}/3",
-                )
-                if _warn_store[uid] >= 3:
-                    await ctx.bot.ban_chat_member(chat_id, uid)
-            except Exception:
-                pass
-            return
-        if has_banned_words(text):
-            try:
-                await update.message.delete()
-            except Exception:
-                pass
-            return
-
-    add_xp(uid, XP_MESSAGE)
-
-    if chat_id in _quiz_active:
-        q = _quiz_active[chat_id]
-        for ans in q["answers"]:
-            if ans.lower() in text.lower():
-                del _quiz_active[chat_id]
-                add_xp(uid, XP_QUIZ_WIN)
-                add_badge(uid, "quiz_master")
-                try:
-                    await update.message.reply_html(
-                        f"🎉 <b>{update.effective_user.first_name}</b> got it!\n\n"
-                        f"✅ Correct: <b>{q['correct']}</b>\n"
-                        f"💡 {q['fact']}\n\n🎖️ +{XP_QUIZ_WIN} XP!"
-                    )
-                except Exception:
-                    pass
-                break
-
-    if can_reply_to_user(uid) and len(text.strip()) >= 3 and not text.startswith("/"):
+    # Raid mode check
+    if _raid_mode.get(chat_id):
         try:
-            d = fetch_hrz_price()
-            price_ctx = f"Current HRZ price: ${float(d['price_usd']):.10f}" if d else ""
-            prompt = (
-                f"Community message: '{text}'\n{price_ctx}\n"
-                f"Give a helpful English reply about HRZ. Short (2-3 sentences max)."
+            await update.message.delete()
+        except Exception:
+            pass
+        return
+
+    # Spam check
+    if is_spam(text) or has_banned_words(text):
+        _warn_store[user.id] += 1
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        try:
+            await ctx.bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"⚠️ {user.mention_html()} — Message removed (rule violation).\n"
+                    f"Warning {_warn_store[user.id]}/{MAX_WARNS_BEFORE_BAN}"
+                ),
+                parse_mode=ParseMode.HTML
             )
-            answer = ask_gemini(prompt, max_tokens=150)
-            await update.message.reply_html(answer, disable_web_page_preview=True)
-        except Exception as e:
-            logger.error(f"AI reply: {e}")
+        except Exception:
+            pass
+        if _warn_store[user.id] >= MAX_WARNS_BEFORE_BAN:
+            try:
+                await ctx.bot.ban_chat_member(chat_id, user.id)
+            except Exception:
+                pass
+        return
 
-# ── CALLBACK BUTTONS ──────────────────────────────────────────────────────────
+    # XP for message
+    add_xp(user.id, XP_MESSAGE)
 
-async def button_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data == "price":
-        d = fetch_hrz_price()
-        text = price_text(d) if d else "❌ Price unavailable."
-        await query.edit_message_text(text, parse_mode="HTML", disable_web_page_preview=True, reply_markup=main_keyboard())
-    elif query.data == "stats":
-        d = fetch_hrz_price()
-        if d:
-            text = (
-                f"📊 <b>HRZ Stats</b>\n\n"
-                f"Vol 6h: <b>${float(d['volume_6h']):,.2f}</b>\n"
-                f"Vol 24h: <b>${float(d['volume_24h']):,.2f}</b>\n"
-                f"Liquidity: <b>${float(d['liquidity']):,.2f}</b>\n"
-                f"Buys: <b>{d['txns_buys']}</b> | Sells: <b>{d['txns_sells']}</b>"
-            )
-        else:
-            text = "❌ Stats unavailable."
-        await query.edit_message_text(text, parse_mode="HTML", reply_markup=main_keyboard())
-    elif query.data == "feargreed":
-        fg = fetch_fear_greed()
-        val = int(fg["value"]) if str(fg["value"]).isdigit() else 50
-        emoji = "😱 Extreme Fear" if val<=25 else "😨 Fear" if val<=45 else "😐 Neutral" if val<=55 else "😊 Greed" if val<=75 else "🤑 Extreme Greed"
-        await query.edit_message_text(
-            f"😱 <b>Fear & Greed Index</b>\n\nScore: <b>{fg['value']}/100</b>\nStatus: <b>{emoji}</b>",
-            parse_mode="HTML", reply_markup=main_keyboard()
-        )
-    elif query.data == "ath":
-        d = fetch_hrz_price()
-        current = float(d["price_usd"]) if d else 0
-        ath = _ath_store
-        distance = ((ath["price"] - current) / ath["price"] * 100) if ath["price"] > 0 else 0
-        await query.edit_message_text(
-            f"🏆 <b>HRZ ATH</b>\n\nATH: <b>${ath['price']:.10f}</b>\nDate: <b>{ath['date'] or 'Tracking...'}</b>\n\nCurrent: <b>${current:.10f}</b>\n📉 {distance:.1f}% below ATH",
-            parse_mode="HTML", reply_markup=main_keyboard()
-        )
-    elif query.data == "myxp":
-        uid = query.from_user.id
-        xp = _xp_store[uid]
-        badges = _badge_store.get(uid, set())
-        badge_text = " ".join([BADGES.get(b, b) for b in badges]) if badges else "None yet"
-        await query.edit_message_text(
-            f"🎖️ <b>Your Rank</b>\n\n⚡ XP: <b>{xp}</b>\n🏅 Level: <b>{get_level(xp)}</b>\n🎀 Badges: {badge_text}",
-            parse_mode="HTML", reply_markup=main_keyboard()
-        )
-    elif query.data == "contract":
-        await query.edit_message_text(
-            f"📍 <b>HRZ Contract</b>\n\n<code>{HRZ_CONTRACT}</code>\n\n✅ Verified | 🔒 Locked 1yr | 0% Buy Tax",
-            parse_mode="HTML", reply_markup=main_keyboard()
-        )
+    # Quiz check
+    if chat_id in _quiz_active:
+        q       = _quiz_active[chat_id]
+        answer  = text.strip().lower()
+        correct_answers = [a.lower() for a in q.get("answers", [])]
+        if answer in correct_answers:
+            prize   = q.get("xp", 20)
+            leveled = add_xp(user.id, prize)
+            del _quiz_active[chat_id]
+            try:
+                await update.message.reply_html(
+                    f"🎉 <b>CORRECT!</b> Well done {user.first_name}!\n\n"
+                    f"✅ Answer: <b>{q['correct']}</b>\n"
+                    f"💡 Fact: <i>{q.get('fact', '')}</i>\n\n"
+                    f"🎁 You earned <b>+{prize} XP!</b>\n"
+                    f"{'🆙 <b>LEVEL UP!</b> 🎉' if leveled else ''}"
+                )
+            except Exception:
+                pass
+            return
 
-# ── SCHEDULE COMMANDS ─────────────────────────────────────────────────────────
+    # AI auto-reply for crypto questions
+    if is_crypto_related(text) and len(text) > 15 and "?" in text:
+        if can_reply_to_user(user.id):
+            try:
+                answer = ask_gemini(text, max_tokens=200, temperature=0.8)
+                await update.message.reply_html(
+                    f"🤖 {answer}",
+                    disable_web_page_preview=True
+                )
+            except Exception as e:
+                logger.error(f"AI reply error: {e}")
 
-async def cmd_schedule(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    global _ath_alerted
-    chat_id = update.effective_chat.id
-    name = str(chat_id)
-
-    d = fetch_hrz_price()
-    if d:
-        _ath_alerted = float(d["price_usd"])
-
-    jobs = [
-        (scheduled_post,  POST_INTERVAL,    10,   f"post_{name}"),
-        (scheduled_quiz,  QUIZ_INTERVAL,    120,  f"quiz_{name}"),
-        (buy_bot_tick,    BUY_BOT_INTERVAL, 5,    f"buybot_{name}"),
-        (vote_reminder,   VOTE_INTERVAL,    3600, f"vote_{name}"),
-        (daily_report,    REPORT_INTERVAL,  7200, f"report_{name}"),
-        (ath_check_tick,  ATH_CHECK,        30,   f"ath_{name}"),
-        (post_to_channel, POST_INTERVAL,    15,   f"channel_{name}"),
-    ]
-
-    for func, interval, first, job_name in jobs:
-        ctx.job_queue.run_repeating(
-            func, interval=interval, first=first,
-            chat_id=chat_id, name=job_name
-        )
-
-    await update.message.reply_html(
-        f"✅ <b>HRZ Bot Fully Activated!</b>\n\n"
-        f"📢 Auto-posts: every <b>20 min</b>\n"
-        f"🧠 Quiz: every <b>hour</b>\n"
-        f"🟢 Buy alerts: every <b>30s</b>\n"
-        f"🏆 ATH detection: every <b>5 min</b>\n"
-        f"📊 Daily report: every <b>24h</b>\n"
-        f"📣 Channel posts: every <b>20 min</b>\n\n"
-        f"🌊 The strait is now online!"
-    )
-
-async def cmd_stop_schedule(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    name = str(update.effective_chat.id)
-    count = 0
-    for prefix in ("post_", "quiz_", "buybot_", "vote_", "report_", "ath_", "channel_"):
-        for job in ctx.job_queue.get_jobs_by_name(f"{prefix}{name}"):
-            job.schedule_removal()
-            count += 1
-    await update.message.reply_text(f"🛑 {count} auto jobs stopped.")
-
-# ── MAIN ──────────────────────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════
+# ── MAIN
+# ════════════════════════════════════════════════════════════════════
 
 def main():
-    app = Application.builder().token(TOKEN).build()
+    app = (
+        Application.builder()
+        .token(TOKEN)
+        .build()
+    )
 
+    # ── Commands
     commands = [
-        ("start",        cmd_start),
-        ("price",        cmd_price),
-        ("ath",          cmd_ath),
-        ("buy",          cmd_buy),
-        ("contract",     cmd_contract),
-        ("info",         cmd_info),
-        ("rules",        cmd_rules),
-        ("vote",         cmd_vote),
-        ("shill",        cmd_shill),
-        ("ask",          cmd_ask),
-        ("myxp",         cmd_myxp),
-        ("leaderboard",  cmd_leaderboard),
-        ("help",         cmd_help),
-        ("warn",         cmd_warn),
-        ("mute",         cmd_mute),
-        ("unmute",       cmd_unmute),
-        ("ban",          cmd_ban),
-        ("slowmode",     cmd_slowmode),
-        ("lockdown",     cmd_lockdown),
-        ("schedule",     cmd_schedule),
-        ("stopschedule", cmd_stop_schedule),
+        ("start",          cmd_start),
+        ("help",           cmd_help),
+        ("price",          cmd_price),
+        ("stats",          cmd_stats),
+        ("buy",            cmd_buy),
+        ("ath",            cmd_ath),
+        ("feargreed",      cmd_feargreed),
+        ("contract",       cmd_contract),
+        ("tokenomics",     cmd_tokenomics),
+        ("liquidity",      cmd_liquidity),
+        ("about",          cmd_about),
+        ("links",          cmd_links),
+        ("roadmap",        cmd_roadmap),
+        ("quiz",           cmd_quiz),
+        ("myxp",           cmd_myxp),
+        ("daily",          cmd_daily),
+        ("voted",          cmd_voted),
+        ("leaderboard",    cmd_leaderboard),
+        ("ask",            cmd_ask),
+        ("suggest",        cmd_suggest),
+        ("alert",          cmd_alert),
+        ("myalerts",       cmd_myalerts),
+        ("cancelalert",    cmd_cancelalert),
+        ("refer",          cmd_refer),
+        ("sentiment",      cmd_sentiment),
+        ("startgiveaway",  cmd_startgiveaway),
+        ("endgiveaway",    cmd_endgiveaway),
+        ("schedule",       cmd_schedule),
+        ("stopschedule",   cmd_stopschedule),
+        ("botstats",       cmd_botstats),
+        ("warn",           cmd_warn),
+        ("mute",           cmd_mute),
+        ("ban",            cmd_ban),
+        ("announce",       cmd_announce),
     ]
 
-    for cmd, func in commands:
-        app.add_handler(CommandHandler(cmd, func))
+    for name, handler in commands:
+        app.add_handler(CommandHandler(name, handler))
 
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_member))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    app.add_handler(CallbackQueryHandler(callback_handler))
+    app.add_handler(MessageHandler(
+        filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_member
+    ))
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND, message_handler
+    ))
 
-    logger.info("🌊 Hormuz Bot v6 — Running!")
+    logger.info("🌊 HRZ Bot v8 — Ultimate Edition Starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
-
 
 if __name__ == "__main__":
     main()
