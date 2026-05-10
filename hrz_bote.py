@@ -33,7 +33,7 @@ TWITTER      = "https://x.com/armou224"
 CHANNEL_ID   = -1003992608217
 BOT_USERNAME = "@Hurmoz_bot"
 
-POST_INTERVAL    = 20 * 60
+POST_INTERVAL    = 30 * 60
 QUIZ_INTERVAL    = 60 * 60
 BUY_BOT_INTERVAL = 30
 VOTE_INTERVAL    = 24 * 3600
@@ -778,8 +778,10 @@ async def message_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
     text = update.message.text
+    if update.channel_post or update.edited_channel_post:
+        return
     chat_type = update.effective_chat.type
-    if update.effective_user and update.effective_user.is_bot:
+    if not update.effective_user or update.effective_user.is_bot:
         return
     uid = update.effective_user.id
     chat_id = update.effective_chat.id
