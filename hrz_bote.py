@@ -200,7 +200,7 @@ def fetch_hrz_price(force: bool = False) -> dict | None:
         return _price_cache
     data = http_get(f"https://api.dexscreener.com/tokens/v1/bsc/{HRZ_CONTRACT}")
     if data:
-        pairs = data.get("pairs") or []
+        pairs = data if isinstance(data, list) else data.get("pairs", [])
         if pairs:
             p = pairs[0]
             result = {
