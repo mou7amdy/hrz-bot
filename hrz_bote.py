@@ -262,7 +262,7 @@ def has_banned_words(text):
 def can_reply_to_user(user_id):
     now = time.time()
     last = _reply_cooldown.get(user_id, 0)
-    if now - last >= 120:
+    if now - last >= 300:
         _reply_cooldown[user_id] = now
         return True
     return False
@@ -779,6 +779,8 @@ async def message_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     text = update.message.text
     chat_type = update.effective_chat.type
+    if update.effective_user and update.effective_user.is_bot:
+        return
     uid = update.effective_user.id
     chat_id = update.effective_chat.id
 
