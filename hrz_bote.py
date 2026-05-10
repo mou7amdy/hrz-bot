@@ -1398,3 +1398,13 @@ if __name__ == "__main__":
 
     await update.message.reply_text(text, parse_mode="HTML")
 
+
+# FIX: Correct job queue scheduling (critical fix)
+for func, interval, first, job_name in jobs:
+    ctx.job_queue.run_repeating(
+        func,
+        interval=interval,
+        first=first,
+        name=job_name
+    )
+
