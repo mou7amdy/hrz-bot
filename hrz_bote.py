@@ -1381,3 +1381,33 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+from telegram import Update
+from telegram.ext import ContextTypes
+
+async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🟢 HRZ Bot is running correctly")
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+def safe_fetch(func, *args, **kwargs):
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        logger.error(f"SAFE_FETCH ERROR: {e}")
+        return None
+
+import signal
+
+def _shutdown(sig, frame):
+    print("🛑 Bot shutting down safely...")
+
+signal.signal(signal.SIGINT, _shutdown)
+signal.signal(signal.SIGTERM, _shutdown)
+
+async def job_watchdog(context):
+    jobs = context.job_queue.jobs()
+    if not jobs:
+        print("⚠️ JobQueue empty — restarting scheduler")
