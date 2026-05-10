@@ -1381,30 +1381,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    change = float(d['change_24h'])
-    arrow = "📈" if change >= 0 else "📉"
-    sign = "+" if change >= 0 else ""
-
-    text = (
-        f"📊 <b>HRZ Price Update</b>\n\n"
-        f"💵 Price: ${float(d['price_usd']):.10f}\n"
-        f"{arrow} 24h Change: {sign}{change}%\n"
-        f"📊 Volume: ${d['volume_24h']}\n"
-        f"💧 Liquidity: ${d['liquidity']}\n\n"
-        f"🔗 <a href='{DEXSCREENER}'>View Chart</a>\n"
-        f"💱 <a href='{PANCAKE_BUY}'>Buy HRZ</a>"
-    )
-
-    await update.message.reply_text(text, parse_mode="HTML")
-
-
-# FIX: Correct job queue scheduling (critical fix)
-for func, interval, first, job_name in jobs:
-    ctx.job_queue.run_repeating(
-        func,
-        interval=interval,
-        first=first,
-        name=job_name
-    )
-
