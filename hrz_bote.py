@@ -387,7 +387,7 @@ def can_reply_to_user(user_id: int) -> bool:
     """Cooldown 30 seconds between AI replies per user"""
     now = time.time()
     last = _reply_cooldown.get(user_id, 0)
-    if now - last >= 30:
+    if now - last >= 120:
         _reply_cooldown[user_id] = now
         return True
     return False
