@@ -198,7 +198,7 @@ def fetch_hrz_price(force: bool = False) -> dict | None:
     global _price_cache, _price_cache_time
     if not force and _price_cache and (time.time() - _price_cache_time) < PRICE_CACHE_TTL:
         return _price_cache
-    data = http_get(f"https://api.dexscreener.com/latest/dex/tokens/{HRZ_CONTRACT}")
+    data = http_get(f"https://api.dexscreener.com/tokens/v1/bsc/{HRZ_CONTRACT}")
     if data:
         pairs = data.get("pairs") or []
         if pairs:
