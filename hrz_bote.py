@@ -188,7 +188,8 @@ QUIZ_QUESTIONS = [
 
 def http_get(url: str, timeout: int = 8) -> dict | None:
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as r:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read())
     except Exception as e:
         logger.error(f"GET {url[:60]}: {e}")
