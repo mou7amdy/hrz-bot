@@ -458,45 +458,42 @@ def get_market_trend(d: dict) -> str:
     else:          return "🔴 bearish"
 
 # ════════════════════════════════════════════════════════════════════
-# ── GEMINI AI
-# ════════════════════════════════════════════════════════════════════
 
+# ── GEMINI AI + GROQ FALLBACK
 def ask_gemini(prompt: str, max_tokens: int = 400, temperature: float = 0.85) -> str:
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
-    )
-    system = (
-        f"You are the official English-only AI assistant for Hormuz (HRZ) crypto token on BNB Chain. "
-        f"Token: {HRZ_NAME} ({HRZ_SYMBOL}) | Contract: {HRZ_CONTRACT} | "
-        f"Buy: {PANCAKE_BUY} | Chart: {DEXSCREENER} | Website: {WEBSITE} | "
-        f"Twitter: {TWITTER} | Total Supply: {HRZ_SUPPLY:,} | "
-        f"Buy Tax: {HRZ_BUY_TAX}% | Sell Tax: {HRZ_SELL_TAX}% | "
-        f"Liquidity: Locked 1 Year on PinkLock | Network: {HRZ_NETWORK} | "
-        f"Launched: {HRZ_LAUNCH}. "
-        f"RULES: ALWAYS respond in English only. Be enthusiastic and helpful. "
-        f"Max 4 sentences unless asked for more. Add DYOR on financial questions. "
-        f"Never give price predictions. Always mention buy link when relevant."
-    )
-    payload = json.dumps({
-        "contents": [{"parts": [{"text": f"{system}\n\nUser: {prompt}"}]}],
-        "generationConfig": {
-            "maxOutputTokens": max_tokens,
-            "temperature": temperature,
-            "topP": 0.9,
-        },
-        "safetySettings": [
-            {"category": "HARM_CATEGORY_HARASSMENT",  "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH",  "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-        ]
-    }).encode()
-    result = http_post(url, payload)
-    if result:
-        try:
-            return result["candidates"][0]["content"]["parts"][0]["text"]
-        except (KeyError, IndexError):
-            pass
-    return "⚠️ AI temporarily unavailable. Try /ask again shortly! 🌊"
+    # Try Gemini first
+    try:
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
+        )
+        payload = {"contents": [{"parts": [{"text": prompt}]}],
+                   "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature}}
+        r = requests.post(url, json=payload, timeout=15)
+        r.raise_for_status()
+        return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        print(f"[Gemini failed] {e} → trying Groq...")
+
+    # Fallback to Groq
+    try:
+        GROQ_KEY = os.getenv("GROQ_KEY", "")
+        if not GROQ_KEY:
+            return ""
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"}
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+            "temperature": temperature
+        }
+        r = requests.post(url, headers=headers, json=payload, timeout=15)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print(f"[Groq failed] {e}")
+        return ""
 
 def generate_post(post_type: str) -> str:
     d = fetch_hrz_price()
