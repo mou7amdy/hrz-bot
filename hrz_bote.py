@@ -2539,6 +2539,49 @@ async def cmd_mylevel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"<i>Ask more crypto questions to level up! 🚀</i>"
     )
 
+def fetch_crypto_news(limit=5):
+    global _news_cache
+    if time.time() - _news_cache["time"] < 3600 and _news_cache["data"]:
+        return _news_cache["data"]
+    try:
+        url = "https://cryptopanic.com/api/v1/posts/?auth_token=free&kind=news&currencies=BNB&public=true"
+        req = urllib.request.Request(url, headers={"User-Agent": "HRZBot/8.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read())
+            news = [{"title": i.get("title",""), "url": i.get("url",""),
+                     "source": i.get("source",{}).get("title","")}
+                    for i in data.get("results",[])[:limit]]
+            _news_cache = {"data": news, "time": time.time()}
+            return news
+    except Exception as e:
+        print(f"[News failed] {e}")
+        return []
+
+EDUCATIONAL_TOPICS_V2 = [
+    ("doji",            "Explain the Doji candlestick pattern with trading example. Connect to reading $HRZ chart."),
+    ("hammer",          "Explain Hammer and Inverted Hammer candlestick. Entry signals and risk management."),
+    ("engulfing",       "Explain Bullish and Bearish Engulfing patterns. How to trade reversals."),
+    ("rsi",             "Deep dive RSI: divergence, overbought/oversold, failure swings. Advanced strategy."),
+    ("macd",            "Advanced MACD: histogram, signal crossovers, zero line. Professional trading."),
+    ("bollinger",       "Bollinger Bands: squeeze, expansion, walking the bands. Trading strategy."),
+    ("fibonacci",       "Fibonacci retracement: 0.382, 0.5, 0.618 levels. How to draw and use them."),
+    ("volume",          "Volume analysis: spikes, divergence, healthy vs unhealthy volume. $HRZ context."),
+    ("support_resist",  "Support and resistance: how to identify, test, break. Key levels on DEX charts."),
+    ("market_cycles",   "Crypto market cycles: accumulation, markup, distribution, markdown. Current phase."),
+    ("dca",             "Dollar Cost Averaging strategy. Why it beats timing the market. Apply to $HRZ."),
+    ("risk_mgmt",       "Position sizing and risk management. 1-2% rule, stop loss, take profit strategy."),
+    ("defi_basics",     "DeFi basics: AMM, liquidity pools, slippage, impermanent loss. PancakeSwap guide."),
+    ("whale_tracking",  "How to track whale wallets on BscScan. What large transactions signal."),
+    ("fear_greed",      "Fear & Greed Index deep dive. Extreme fear = buy? Historical analysis."),
+    ("on_chain",        "On-chain analysis basics: wallet tracking, volume, holder distribution on BSC."),
+    ("tokenomics_101",  "Tokenomics fundamentals: supply, distribution, taxes. How to evaluate any token."),
+    ("market_cap",      "Market cap vs price vs FDV. Why cheap price doesn't mean undervalued."),
+    ("bull_patterns",   "Bullish patterns: cup and handle, bull flag, ascending triangle, double bottom."),
+    ("bear_patterns",   "Bearish patterns: head and shoulders, double top, descending triangle."),
+]
+
+_edu_v2_index = 0
+
 async def cmd_news(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     news = fetch_crypto_news(5)
     if not news:
@@ -2775,48 +2818,6 @@ def ask_smart(user_id, text, price_data=None):
 
 _news_cache = {"data": [], "time": 0}
 
-def fetch_crypto_news(limit=5):
-    global _news_cache
-    if time.time() - _news_cache["time"] < 3600 and _news_cache["data"]:
-        return _news_cache["data"]
-    try:
-        url = "https://cryptopanic.com/api/v1/posts/?auth_token=free&kind=news&currencies=BNB&public=true"
-        req = urllib.request.Request(url, headers={"User-Agent": "HRZBot/8.0"})
-        with urllib.request.urlopen(req, timeout=8) as r:
-            data = json.loads(r.read())
-            news = [{"title": i.get("title",""), "url": i.get("url",""),
-                     "source": i.get("source",{}).get("title","")}
-                    for i in data.get("results",[])[:limit]]
-            _news_cache = {"data": news, "time": time.time()}
-            return news
-    except Exception as e:
-        print(f"[News failed] {e}")
-        return []
-
-EDUCATIONAL_TOPICS_V2 = [
-    ("doji",            "Explain the Doji candlestick pattern with trading example. Connect to reading $HRZ chart."),
-    ("hammer",          "Explain Hammer and Inverted Hammer candlestick. Entry signals and risk management."),
-    ("engulfing",       "Explain Bullish and Bearish Engulfing patterns. How to trade reversals."),
-    ("rsi",             "Deep dive RSI: divergence, overbought/oversold, failure swings. Advanced strategy."),
-    ("macd",            "Advanced MACD: histogram, signal crossovers, zero line. Professional trading."),
-    ("bollinger",       "Bollinger Bands: squeeze, expansion, walking the bands. Trading strategy."),
-    ("fibonacci",       "Fibonacci retracement: 0.382, 0.5, 0.618 levels. How to draw and use them."),
-    ("volume",          "Volume analysis: spikes, divergence, healthy vs unhealthy volume. $HRZ context."),
-    ("support_resist",  "Support and resistance: how to identify, test, break. Key levels on DEX charts."),
-    ("market_cycles",   "Crypto market cycles: accumulation, markup, distribution, markdown. Current phase."),
-    ("dca",             "Dollar Cost Averaging strategy. Why it beats timing the market. Apply to $HRZ."),
-    ("risk_mgmt",       "Position sizing and risk management. 1-2% rule, stop loss, take profit strategy."),
-    ("defi_basics",     "DeFi basics: AMM, liquidity pools, slippage, impermanent loss. PancakeSwap guide."),
-    ("whale_tracking",  "How to track whale wallets on BscScan. What large transactions signal."),
-    ("fear_greed",      "Fear & Greed Index deep dive. Extreme fear = buy? Historical analysis."),
-    ("on_chain",        "On-chain analysis basics: wallet tracking, volume, holder distribution on BSC."),
-    ("tokenomics_101",  "Tokenomics fundamentals: supply, distribution, taxes. How to evaluate any token."),
-    ("market_cap",      "Market cap vs price vs FDV. Why cheap price doesn't mean undervalued."),
-    ("bull_patterns",   "Bullish patterns: cup and handle, bull flag, ascending triangle, double bottom."),
-    ("bear_patterns",   "Bearish patterns: head and shoulders, double top, descending triangle."),
-]
-
-_edu_v2_index = 0
 
 async def educational_post_v2(ctx):
     global _edu_v2_index
