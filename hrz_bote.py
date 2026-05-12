@@ -2523,69 +2523,6 @@ async def message_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ── MAIN
 # ════════════════════════════════════════════════════════════════════
 
-def main():
-    app = (
-        Application.builder()
-        .token(TOKEN)
-        .build()
-    )
-
-    # ── Commands
-    commands = [
-        ("start",          cmd_start),
-        ("help",           cmd_help),
-        ("price",          cmd_price),
-        ("stats",          cmd_stats),
-        ("buy",            cmd_buy),
-        ("ath",            cmd_ath),
-        ("feargreed",      cmd_feargreed),
-        ("contract",       cmd_contract),
-        ("tokenomics",     cmd_tokenomics),
-        ("liquidity",      cmd_liquidity),
-        ("about",          cmd_about),
-        ("links",          cmd_links),
-        ("roadmap",        cmd_roadmap),
-        ("quiz",           cmd_quiz),
-        ("myxp",           cmd_myxp),
-        ("daily",          cmd_daily),
-        ("voted",          cmd_voted),
-        ("leaderboard",    cmd_leaderboard),
-        ("ask",            cmd_ask),
-        ("suggest",        cmd_suggest),
-        ("alert",          cmd_alert),
-        ("myalerts",       cmd_myalerts),
-        ("cancelalert",    cmd_cancelalert),
-        ("refer",          cmd_refer),
-        ("sentiment",      cmd_sentiment),
-        ("startgiveaway",  cmd_startgiveaway),
-        ("endgiveaway",    cmd_endgiveaway),
-        ("schedule",       cmd_schedule),
-        ("stopschedule",   cmd_stopschedule),
-        ("botstats",       cmd_botstats),
-        ("warn",           cmd_warn),
-        ("mute",           cmd_mute),
-        ("ban",            cmd_ban),
-        ("announce",       cmd_announce),
-        ("clearmemory",    cmd_clearmemory),
-        ("mylevel",        cmd_mylevel),
-        ("news",           cmd_news),
-        ("marketing",      cmd_marketing),
-    ]
-
-    for name, handler in commands:
-        app.add_handler(CommandHandler(name, handler))
-
-    app.add_handler(CallbackQueryHandler(callback_handler))
-    app.add_handler(MessageHandler(
-        filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_member
-    ))
-    app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND, message_handler
-    ))
-
-    logger.info("🌊 HRZ Bot v8 — Ultimate Edition Starting...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
-
 async def cmd_clearmemory(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     clear_memory(update.effective_user.id)
     await update.message.reply_text("🧹 Memory cleared! Fresh start. 🌊")
@@ -2659,6 +2596,69 @@ async def cmd_marketing(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("📊 Chart",   url=DEXSCREENER),
         ]])
     )
+def main():
+    app = (
+        Application.builder()
+        .token(TOKEN)
+        .build()
+    )
+
+    # ── Commands
+    commands = [
+        ("start",          cmd_start),
+        ("help",           cmd_help),
+        ("price",          cmd_price),
+        ("stats",          cmd_stats),
+        ("buy",            cmd_buy),
+        ("ath",            cmd_ath),
+        ("feargreed",      cmd_feargreed),
+        ("contract",       cmd_contract),
+        ("tokenomics",     cmd_tokenomics),
+        ("liquidity",      cmd_liquidity),
+        ("about",          cmd_about),
+        ("links",          cmd_links),
+        ("roadmap",        cmd_roadmap),
+        ("quiz",           cmd_quiz),
+        ("myxp",           cmd_myxp),
+        ("daily",          cmd_daily),
+        ("voted",          cmd_voted),
+        ("leaderboard",    cmd_leaderboard),
+        ("ask",            cmd_ask),
+        ("suggest",        cmd_suggest),
+        ("alert",          cmd_alert),
+        ("myalerts",       cmd_myalerts),
+        ("cancelalert",    cmd_cancelalert),
+        ("refer",          cmd_refer),
+        ("sentiment",      cmd_sentiment),
+        ("startgiveaway",  cmd_startgiveaway),
+        ("endgiveaway",    cmd_endgiveaway),
+        ("schedule",       cmd_schedule),
+        ("stopschedule",   cmd_stopschedule),
+        ("botstats",       cmd_botstats),
+        ("warn",           cmd_warn),
+        ("mute",           cmd_mute),
+        ("ban",            cmd_ban),
+        ("announce",       cmd_announce),
+        ("clearmemory",    cmd_clearmemory),
+        ("mylevel",        cmd_mylevel),
+        ("news",           cmd_news),
+        ("marketing",      cmd_marketing),
+    ]
+
+    for name, handler in commands:
+        app.add_handler(CommandHandler(name, handler))
+
+    app.add_handler(CallbackQueryHandler(callback_handler))
+    app.add_handler(MessageHandler(
+        filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_member
+    ))
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND, message_handler
+    ))
+
+    logger.info("🌊 HRZ Bot v8 — Ultimate Edition Starting...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
 if __name__ == "__main__":
     main()
 
