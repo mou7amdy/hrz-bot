@@ -466,61 +466,6 @@ def get_market_trend(d: dict) -> str:
 # ── GEMINI AI + GROQ FALLBACK
 
 # ── GROK (xAI) API
-def ask_grok(prompt: str, max_tokens: int = 500, temperature: float = 0.9) -> str:
-    try:
-        url = "https://api.x.ai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {XAI_KEY}",
-            "Content-Type": "application/json"
-        }
-        system = (
-            "You are an expert crypto analyst and educator for Hormuz (HRZ) token on BNB Chain. "
-            "You have deep knowledge of: candlestick patterns, technical analysis, DeFi, tokenomics, "
-            "market psychology, trading strategies, and crypto fundamentals. "
-            "Always relate insights to $HRZ when relevant. Respond in English only. "
-            "Be educational, engaging, and professional. Use emojis appropriately."
-        )
-        payload = {
-            "model": "grok-3-latest",
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user",   "content": prompt}
-            ],
-            "max_tokens": max_tokens,
-            "temperature": temperature
-        }
-        r = requests.post(url, headers=headers, json=payload, timeout=20)
-        r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print(f"[Grok failed] {e}")
-        return ask_gemini(prompt, max_tokens, temperature)
-
-EDUCATIONAL_TOPICS = [
-    ("candlestick_basics",    "Explain one candlestick pattern (doji, hammer, engulfing, shooting star, etc.) in simple terms with a trading example. Connect it to reading $HRZ chart."),
-    ("support_resistance",    "Explain support and resistance levels in crypto trading. Give practical tips on how to use them. Reference how this applies to $HRZ."),
-    ("volume_analysis",       "Explain why trading volume is crucial in crypto. Explain volume spikes, low volume pumps, and what healthy volume looks like. Reference $HRZ volume data."),
-    ("rsi_indicator",         "Explain the RSI (Relative Strength Index) indicator. What is overbought/oversold? How to use it for buy/sell decisions on tokens like $HRZ."),
-    ("macd_indicator",        "Explain MACD indicator in simple terms. What is the signal line crossover? How traders use it for crypto like $HRZ."),
-    ("market_cap_vs_fdv",     "Explain the difference between Market Cap and FDV (Fully Diluted Valuation) in crypto. Why does it matter for new tokens like $HRZ?"),
-    ("liquidity_importance",  "Explain why liquidity is crucial in DeFi/DEX trading. What happens with low liquidity? Why is $HRZ locked liquidity a safety feature?"),
-    ("tokenomics_101",        "Explain tokenomics fundamentals: supply, distribution, burn mechanisms, taxes. How to evaluate a token's tokenomics like $HRZ."),
-    ("dex_vs_cex",            "Explain the difference between DEX (like PancakeSwap) and CEX (like Binance). Pros and cons of each. Why $HRZ is currently on DEX."),
-    ("whale_behavior",        "Explain whale behavior in crypto markets. How do whales accumulate, how to spot whale activity on-chain, and what it means for tokens like $HRZ."),
-    ("fomo_vs_fud",           "Explain FOMO and FUD in crypto psychology. How emotions drive markets. How to make rational decisions when buying tokens like $HRZ."),
-    ("bnb_chain_advantages",  "Explain the advantages of BNB Chain (BSC) for DeFi tokens. Low fees, fast transactions, PancakeSwap ecosystem. Why $HRZ chose BNB Chain."),
-    ("chart_timeframes",      "Explain different chart timeframes (1m, 5m, 1h, 4h, 1D). Which to use for day trading vs holding. How to read $HRZ chart effectively."),
-    ("buy_sell_pressure",     "Explain buy/sell pressure and order books in crypto. What does high buy pressure mean? How to read it on DEX like PancakeSwap for $HRZ."),
-    ("crypto_risk_management","Explain position sizing and risk management in crypto. The 1-2% rule, stop losses, take profits. How to invest safely in tokens like $HRZ."),
-    ("on_chain_analysis",     "Explain on-chain analysis basics: wallet tracking, transaction volume, holder distribution. What to look for on BscScan for tokens like $HRZ."),
-    ("defi_fundamentals",     "Explain DeFi fundamentals: liquidity pools, AMMs, slippage, impermanent loss. How PancakeSwap works for trading $HRZ."),
-    ("crypto_cycles",         "Explain crypto market cycles: accumulation, markup, distribution, markdown. Which phase are we in? How early-stage tokens like $HRZ fit in."),
-    ("hodl_strategy",         "Explain the HODL strategy vs trading. Diamond hands psychology, dollar cost averaging (DCA). Why long-term holding suits tokens like $HRZ."),
-    ("bullish_patterns",      "Explain bullish chart patterns: cup and handle, bull flag, ascending triangle, double bottom. How to spot them on $HRZ chart."),
-]
-
-_edu_index = 0
-
 async def educational_post(ctx):
     global _edu_index
     chat_id = ctx.job.chat_id
@@ -1924,6 +1869,247 @@ async def cmd_endgiveaway(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await end_giveaway(type("obj", (), {"job": type("j", (), {"chat_id": chat_id})(), "bot": ctx.bot})())
 
 # ── ADMIN COMMANDS
+def ask_grok(prompt: str, max_tokens: int = 500, temperature: float = 0.9) -> str:
+    try:
+        url = "https://api.x.ai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {XAI_KEY}",
+            "Content-Type": "application/json"
+        }
+        system = (
+            "You are an expert crypto analyst and educator for Hormuz (HRZ) token on BNB Chain. "
+            "You have deep knowledge of: candlestick patterns, technical analysis, DeFi, tokenomics, "
+            "market psychology, trading strategies, and crypto fundamentals. "
+            "Always relate insights to $HRZ when relevant. Respond in English only. "
+            "Be educational, engaging, and professional. Use emojis appropriately."
+        )
+        payload = {
+            "model": "grok-3-latest",
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user",   "content": prompt}
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature
+        }
+        r = requests.post(url, headers=headers, json=payload, timeout=20)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print(f"[Grok failed] {e}")
+        return ask_gemini(prompt, max_tokens, temperature)
+
+EDUCATIONAL_TOPICS = [
+    ("candlestick_basics",    "Explain one candlestick pattern (doji, hammer, engulfing, shooting star, etc.) in simple terms with a trading example. Connect it to reading $HRZ chart."),
+    ("support_resistance",    "Explain support and resistance levels in crypto trading. Give practical tips on how to use them. Reference how this applies to $HRZ."),
+    ("volume_analysis",       "Explain why trading volume is crucial in crypto. Explain volume spikes, low volume pumps, and what healthy volume looks like. Reference $HRZ volume data."),
+    ("rsi_indicator",         "Explain the RSI (Relative Strength Index) indicator. What is overbought/oversold? How to use it for buy/sell decisions on tokens like $HRZ."),
+    ("macd_indicator",        "Explain MACD indicator in simple terms. What is the signal line crossover? How traders use it for crypto like $HRZ."),
+    ("market_cap_vs_fdv",     "Explain the difference between Market Cap and FDV (Fully Diluted Valuation) in crypto. Why does it matter for new tokens like $HRZ?"),
+    ("liquidity_importance",  "Explain why liquidity is crucial in DeFi/DEX trading. What happens with low liquidity? Why is $HRZ locked liquidity a safety feature?"),
+    ("tokenomics_101",        "Explain tokenomics fundamentals: supply, distribution, burn mechanisms, taxes. How to evaluate a token's tokenomics like $HRZ."),
+    ("dex_vs_cex",            "Explain the difference between DEX (like PancakeSwap) and CEX (like Binance). Pros and cons of each. Why $HRZ is currently on DEX."),
+    ("whale_behavior",        "Explain whale behavior in crypto markets. How do whales accumulate, how to spot whale activity on-chain, and what it means for tokens like $HRZ."),
+    ("fomo_vs_fud",           "Explain FOMO and FUD in crypto psychology. How emotions drive markets. How to make rational decisions when buying tokens like $HRZ."),
+    ("bnb_chain_advantages",  "Explain the advantages of BNB Chain (BSC) for DeFi tokens. Low fees, fast transactions, PancakeSwap ecosystem. Why $HRZ chose BNB Chain."),
+    ("chart_timeframes",      "Explain different chart timeframes (1m, 5m, 1h, 4h, 1D). Which to use for day trading vs holding. How to read $HRZ chart effectively."),
+    ("buy_sell_pressure",     "Explain buy/sell pressure and order books in crypto. What does high buy pressure mean? How to read it on DEX like PancakeSwap for $HRZ."),
+    ("crypto_risk_management","Explain position sizing and risk management in crypto. The 1-2% rule, stop losses, take profits. How to invest safely in tokens like $HRZ."),
+    ("on_chain_analysis",     "Explain on-chain analysis basics: wallet tracking, transaction volume, holder distribution. What to look for on BscScan for tokens like $HRZ."),
+    ("defi_fundamentals",     "Explain DeFi fundamentals: liquidity pools, AMMs, slippage, impermanent loss. How PancakeSwap works for trading $HRZ."),
+    ("crypto_cycles",         "Explain crypto market cycles: accumulation, markup, distribution, markdown. Which phase are we in? How early-stage tokens like $HRZ fit in."),
+    ("hodl_strategy",         "Explain the HODL strategy vs trading. Diamond hands psychology, dollar cost averaging (DCA). Why long-term holding suits tokens like $HRZ."),
+    ("bullish_patterns",      "Explain bullish chart patterns: cup and handle, bull flag, ascending triangle, double bottom. How to spot them on $HRZ chart."),
+]
+
+_edu_index = 0
+
+def ask_smart(user_id, text, price_data=None):
+    intent     = detect_intent(text)
+    user_level = detect_user_level(user_id)
+    system     = build_system_prompt(intent, user_level, price_data)
+    history    = get_memory(user_id)
+    messages   = [{"role": "system", "content": system}]
+    messages.extend(history)
+    messages.append({"role": "user", "content": text})
+    try:
+        url = "https://api.x.ai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {XAI_KEY}", "Content-Type": "application/json"}
+        payload = {"model": "grok-3-latest", "messages": messages, "max_tokens": 400, "temperature": 0.85}
+        r = requests.post(url, headers=headers, json=payload, timeout=20)
+        r.raise_for_status()
+        answer = r.json()["choices"][0]["message"]["content"].strip()
+        add_to_memory(user_id, "user", text)
+        add_to_memory(user_id, "assistant", answer)
+        return answer
+    except Exception as e:
+        print(f"[Grok failed] {e}")
+    return ask_gemini(text, max_tokens=300)
+
+_news_cache = {"data": [], "time": 0}
+
+
+def fetch_crypto_news(limit=5):
+    global _news_cache
+    if time.time() - _news_cache["time"] < 3600 and _news_cache["data"]:
+        return _news_cache["data"]
+    try:
+        url = "https://cryptopanic.com/api/v1/posts/?auth_token=free&kind=news&currencies=BNB&public=true"
+        req = urllib.request.Request(url, headers={"User-Agent": "HRZBot/8.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read())
+            news = [{"title": i.get("title",""), "url": i.get("url",""),
+                     "source": i.get("source",{}).get("title","")}
+                    for i in data.get("results",[])[:limit]]
+            _news_cache = {"data": news, "time": time.time()}
+            return news
+    except Exception as e:
+        print(f"[News failed] {e}")
+        return []
+
+EDUCATIONAL_TOPICS_V2 = [
+    ("doji",            "Explain the Doji candlestick pattern with trading example. Connect to reading $HRZ chart."),
+    ("hammer",          "Explain Hammer and Inverted Hammer candlestick. Entry signals and risk management."),
+    ("engulfing",       "Explain Bullish and Bearish Engulfing patterns. How to trade reversals."),
+    ("rsi",             "Deep dive RSI: divergence, overbought/oversold, failure swings. Advanced strategy."),
+    ("macd",            "Advanced MACD: histogram, signal crossovers, zero line. Professional trading."),
+    ("bollinger",       "Bollinger Bands: squeeze, expansion, walking the bands. Trading strategy."),
+    ("fibonacci",       "Fibonacci retracement: 0.382, 0.5, 0.618 levels. How to draw and use them."),
+    ("volume",          "Volume analysis: spikes, divergence, healthy vs unhealthy volume. $HRZ context."),
+    ("support_resist",  "Support and resistance: how to identify, test, break. Key levels on DEX charts."),
+    ("market_cycles",   "Crypto market cycles: accumulation, markup, distribution, markdown. Current phase."),
+    ("dca",             "Dollar Cost Averaging strategy. Why it beats timing the market. Apply to $HRZ."),
+    ("risk_mgmt",       "Position sizing and risk management. 1-2% rule, stop loss, take profit strategy."),
+    ("defi_basics",     "DeFi basics: AMM, liquidity pools, slippage, impermanent loss. PancakeSwap guide."),
+    ("whale_tracking",  "How to track whale wallets on BscScan. What large transactions signal."),
+    ("fear_greed",      "Fear & Greed Index deep dive. Extreme fear = buy? Historical analysis."),
+    ("on_chain",        "On-chain analysis basics: wallet tracking, volume, holder distribution on BSC."),
+    ("tokenomics_101",  "Tokenomics fundamentals: supply, distribution, taxes. How to evaluate any token."),
+    ("market_cap",      "Market cap vs price vs FDV. Why cheap price doesn't mean undervalued."),
+    ("bull_patterns",   "Bullish patterns: cup and handle, bull flag, ascending triangle, double bottom."),
+    ("bear_patterns",   "Bearish patterns: head and shoulders, double top, descending triangle."),
+]
+
+_edu_v2_index = 0
+
+async def cmd_clearmemory(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    clear_memory(update.effective_user.id)
+    await update.message.reply_text("🧹 Memory cleared! Fresh start. 🌊")
+
+async def cmd_mylevel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    level = detect_user_level(update.effective_user.id)
+    levels = {
+        "beginner":     "🌱 Beginner — Keep learning!",
+        "intermediate": "📈 Intermediate — Nice knowledge!",
+        "expert":       "🏆 Expert — You know your stuff!",
+    }
+    await update.message.reply_html(
+        f"🧠 <b>Your Crypto Level</b>\n\n{levels.get(level,'🌱 Beginner')}\n\n"
+        f"<i>Ask more crypto questions to level up! 🚀</i>"
+    )
+
+async def cmd_news(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    news = fetch_crypto_news(5)
+    if not news:
+        await update.message.reply_text("❌ News unavailable. Try again later.")
+        return
+    lines = ["📰 <b>Latest Crypto News</b>\n"]
+    for i, item in enumerate(news, 1):
+        lines.append(f"{i}. <a href='{item['url']}'>{item['title']}</a>\n   <i>— {item['source']}</i>")
+    await update.message.reply_html("\n".join(lines), disable_web_page_preview=True)
+
+async def cmd_marketing(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    member  = await ctx.bot.get_chat_member(chat_id, update.effective_user.id)
+    if member.status not in ("creator", "administrator"):
+        await update.message.reply_text("❌ Admin only.")
+        return
+    d = fetch_hrz_price()
+    price_ctx = f"${float(d['price_usd']):.10f} | 24h: {d['change_24h']}%" if d else ""
+    types = ["hype","trust","fomo","whale"]
+    post_type = (ctx.args[0] if ctx.args else None) or random.choice(types)
+    prompts = {
+        "hype":  f"Write a viral HYPE Telegram post for $HRZ. Use emotional language, create excitement. Data: {price_ctx}",
+        "trust": f"Write a TRUST-BUILDING post for $HRZ. Focus on: verified contract, locked liquidity, 0% buy tax. Data: {price_ctx}",
+        "fomo":  f"Write a FOMO post for $HRZ. Create urgency about early-stage opportunity. Data: {price_ctx}",
+        "whale": f"Write a WHALE PSYCHOLOGY post. Explain why smart money accumulates early. Reference $HRZ. Data: {price_ctx}",
+    }
+    prompt = (
+        prompts.get(post_type, prompts["hype"]) +
+        "\n\nStyle examples:\n"
+        "GOOD: '🌊 The Strait controls 20% of global oil... $HRZ controls your next 100x 👀'\n"
+        "GOOD: '✅ Verified 🔒 Locked 0% Buy Tax — You do the math 🧮'\n"
+        "Rules: Max 8 lines, HTML bold for numbers, end with #HRZ #Hormuz #BNBChain"
+    )
+    try:
+        url = "https://api.x.ai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {XAI_KEY}", "Content-Type": "application/json"}
+        payload = {"model": "grok-3-latest",
+                   "messages": [{"role": "user", "content": prompt}],
+                   "max_tokens": 300, "temperature": 0.95}
+        r = requests.post(url, headers=headers, json=payload, timeout=20)
+        r.raise_for_status()
+        post = r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        post = ask_gemini(prompt, max_tokens=250)
+    if not post:
+        await update.message.reply_text("❌ Could not generate post.")
+        return
+    await ctx.bot.send_message(
+        chat_id=chat_id,
+        text=post,
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("💱 Buy HRZ", url=PANCAKE_BUY),
+            InlineKeyboardButton("📊 Chart",   url=DEXSCREENER),
+        ]])
+    )
+async def educational_post_v2(ctx):
+    global _edu_v2_index
+    chat_id = ctx.job.chat_id
+    topic, base_prompt = EDUCATIONAL_TOPICS_V2[_edu_v2_index % len(EDUCATIONAL_TOPICS_V2)]
+    _edu_v2_index += 1
+    d = fetch_hrz_price()
+    price_ctx = f"Current $HRZ: ${float(d['price_usd']):.10f}" if d else ""
+    news = fetch_crypto_news(2)
+    news_ctx = "\n".join([f"- {n['title']}" for n in news]) if news else ""
+    full_prompt = (
+        f"Create a professional crypto educational Telegram post about: {base_prompt}\n\n"
+        f"Context: {price_ctx}\nRecent news: {news_ctx}\n\n"
+        f"Format: Start with 📚 <b>Title</b>, use emojis for sections, "
+        f"max 12 lines, HTML bold for key terms, "
+        f"end with 💡 <b>Pro Tip:</b> [actionable advice]. "
+        f"Be genuinely educational and engaging."
+    )
+    try:
+        url = "https://api.x.ai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {XAI_KEY}", "Content-Type": "application/json"}
+        payload = {"model": "grok-3-latest",
+                   "messages": [{"role": "user", "content": full_prompt}],
+                   "max_tokens": 500, "temperature": 0.8}
+        r = requests.post(url, headers=headers, json=payload, timeout=20)
+        r.raise_for_status()
+        content = r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print(f"[Edu post failed] {e}")
+        content = ask_gemini(full_prompt, max_tokens=400)
+    if not content:
+        return
+    try:
+        await ctx.bot.send_message(
+            chat_id=chat_id,
+            text=content,
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📊 $HRZ Chart", url=DEXSCREENER),
+                InlineKeyboardButton("💱 Buy HRZ",    url=PANCAKE_BUY),
+            ]])
+        )
+    except Exception as e:
+        logger.error(f"Edu post send error: {e}")
+
 async def cmd_schedule(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     global _ath_alerted
     user    = update.effective_user
@@ -2523,122 +2709,6 @@ async def message_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ── MAIN
 # ════════════════════════════════════════════════════════════════════
 
-async def cmd_clearmemory(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    clear_memory(update.effective_user.id)
-    await update.message.reply_text("🧹 Memory cleared! Fresh start. 🌊")
-
-async def cmd_mylevel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    level = detect_user_level(update.effective_user.id)
-    levels = {
-        "beginner":     "🌱 Beginner — Keep learning!",
-        "intermediate": "📈 Intermediate — Nice knowledge!",
-        "expert":       "🏆 Expert — You know your stuff!",
-    }
-    await update.message.reply_html(
-        f"🧠 <b>Your Crypto Level</b>\n\n{levels.get(level,'🌱 Beginner')}\n\n"
-        f"<i>Ask more crypto questions to level up! 🚀</i>"
-    )
-
-def fetch_crypto_news(limit=5):
-    global _news_cache
-    if time.time() - _news_cache["time"] < 3600 and _news_cache["data"]:
-        return _news_cache["data"]
-    try:
-        url = "https://cryptopanic.com/api/v1/posts/?auth_token=free&kind=news&currencies=BNB&public=true"
-        req = urllib.request.Request(url, headers={"User-Agent": "HRZBot/8.0"})
-        with urllib.request.urlopen(req, timeout=8) as r:
-            data = json.loads(r.read())
-            news = [{"title": i.get("title",""), "url": i.get("url",""),
-                     "source": i.get("source",{}).get("title","")}
-                    for i in data.get("results",[])[:limit]]
-            _news_cache = {"data": news, "time": time.time()}
-            return news
-    except Exception as e:
-        print(f"[News failed] {e}")
-        return []
-
-EDUCATIONAL_TOPICS_V2 = [
-    ("doji",            "Explain the Doji candlestick pattern with trading example. Connect to reading $HRZ chart."),
-    ("hammer",          "Explain Hammer and Inverted Hammer candlestick. Entry signals and risk management."),
-    ("engulfing",       "Explain Bullish and Bearish Engulfing patterns. How to trade reversals."),
-    ("rsi",             "Deep dive RSI: divergence, overbought/oversold, failure swings. Advanced strategy."),
-    ("macd",            "Advanced MACD: histogram, signal crossovers, zero line. Professional trading."),
-    ("bollinger",       "Bollinger Bands: squeeze, expansion, walking the bands. Trading strategy."),
-    ("fibonacci",       "Fibonacci retracement: 0.382, 0.5, 0.618 levels. How to draw and use them."),
-    ("volume",          "Volume analysis: spikes, divergence, healthy vs unhealthy volume. $HRZ context."),
-    ("support_resist",  "Support and resistance: how to identify, test, break. Key levels on DEX charts."),
-    ("market_cycles",   "Crypto market cycles: accumulation, markup, distribution, markdown. Current phase."),
-    ("dca",             "Dollar Cost Averaging strategy. Why it beats timing the market. Apply to $HRZ."),
-    ("risk_mgmt",       "Position sizing and risk management. 1-2% rule, stop loss, take profit strategy."),
-    ("defi_basics",     "DeFi basics: AMM, liquidity pools, slippage, impermanent loss. PancakeSwap guide."),
-    ("whale_tracking",  "How to track whale wallets on BscScan. What large transactions signal."),
-    ("fear_greed",      "Fear & Greed Index deep dive. Extreme fear = buy? Historical analysis."),
-    ("on_chain",        "On-chain analysis basics: wallet tracking, volume, holder distribution on BSC."),
-    ("tokenomics_101",  "Tokenomics fundamentals: supply, distribution, taxes. How to evaluate any token."),
-    ("market_cap",      "Market cap vs price vs FDV. Why cheap price doesn't mean undervalued."),
-    ("bull_patterns",   "Bullish patterns: cup and handle, bull flag, ascending triangle, double bottom."),
-    ("bear_patterns",   "Bearish patterns: head and shoulders, double top, descending triangle."),
-]
-
-_edu_v2_index = 0
-
-async def cmd_news(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    news = fetch_crypto_news(5)
-    if not news:
-        await update.message.reply_text("❌ News unavailable. Try again later.")
-        return
-    lines = ["📰 <b>Latest Crypto News</b>\n"]
-    for i, item in enumerate(news, 1):
-        lines.append(f"{i}. <a href='{item['url']}'>{item['title']}</a>\n   <i>— {item['source']}</i>")
-    await update.message.reply_html("\n".join(lines), disable_web_page_preview=True)
-
-async def cmd_marketing(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    member  = await ctx.bot.get_chat_member(chat_id, update.effective_user.id)
-    if member.status not in ("creator", "administrator"):
-        await update.message.reply_text("❌ Admin only.")
-        return
-    d = fetch_hrz_price()
-    price_ctx = f"${float(d['price_usd']):.10f} | 24h: {d['change_24h']}%" if d else ""
-    types = ["hype","trust","fomo","whale"]
-    post_type = (ctx.args[0] if ctx.args else None) or random.choice(types)
-    prompts = {
-        "hype":  f"Write a viral HYPE Telegram post for $HRZ. Use emotional language, create excitement. Data: {price_ctx}",
-        "trust": f"Write a TRUST-BUILDING post for $HRZ. Focus on: verified contract, locked liquidity, 0% buy tax. Data: {price_ctx}",
-        "fomo":  f"Write a FOMO post for $HRZ. Create urgency about early-stage opportunity. Data: {price_ctx}",
-        "whale": f"Write a WHALE PSYCHOLOGY post. Explain why smart money accumulates early. Reference $HRZ. Data: {price_ctx}",
-    }
-    prompt = (
-        prompts.get(post_type, prompts["hype"]) +
-        "\n\nStyle examples:\n"
-        "GOOD: '🌊 The Strait controls 20% of global oil... $HRZ controls your next 100x 👀'\n"
-        "GOOD: '✅ Verified 🔒 Locked 0% Buy Tax — You do the math 🧮'\n"
-        "Rules: Max 8 lines, HTML bold for numbers, end with #HRZ #Hormuz #BNBChain"
-    )
-    try:
-        url = "https://api.x.ai/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {XAI_KEY}", "Content-Type": "application/json"}
-        payload = {"model": "grok-3-latest",
-                   "messages": [{"role": "user", "content": prompt}],
-                   "max_tokens": 300, "temperature": 0.95}
-        r = requests.post(url, headers=headers, json=payload, timeout=20)
-        r.raise_for_status()
-        post = r.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        post = ask_gemini(prompt, max_tokens=250)
-    if not post:
-        await update.message.reply_text("❌ Could not generate post.")
-        return
-    await ctx.bot.send_message(
-        chat_id=chat_id,
-        text=post,
-        parse_mode=ParseMode.HTML,
-        disable_web_page_preview=True,
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("💱 Buy HRZ", url=PANCAKE_BUY),
-            InlineKeyboardButton("📊 Chart",   url=DEXSCREENER),
-        ]])
-    )
 def main():
     app = (
         Application.builder()
@@ -2793,74 +2863,4 @@ def build_system_prompt(intent, user_level, price_data=None):
             level_map.get(user_level, level_map["beginner"]) +
             intent_map.get(intent, intent_map["general"]) +
             "Respond in English only. Use HTML bold for numbers. End with emoji. ")
-
-def ask_smart(user_id, text, price_data=None):
-    intent     = detect_intent(text)
-    user_level = detect_user_level(user_id)
-    system     = build_system_prompt(intent, user_level, price_data)
-    history    = get_memory(user_id)
-    messages   = [{"role": "system", "content": system}]
-    messages.extend(history)
-    messages.append({"role": "user", "content": text})
-    try:
-        url = "https://api.x.ai/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {XAI_KEY}", "Content-Type": "application/json"}
-        payload = {"model": "grok-3-latest", "messages": messages, "max_tokens": 400, "temperature": 0.85}
-        r = requests.post(url, headers=headers, json=payload, timeout=20)
-        r.raise_for_status()
-        answer = r.json()["choices"][0]["message"]["content"].strip()
-        add_to_memory(user_id, "user", text)
-        add_to_memory(user_id, "assistant", answer)
-        return answer
-    except Exception as e:
-        print(f"[Grok failed] {e}")
-    return ask_gemini(text, max_tokens=300)
-
-_news_cache = {"data": [], "time": 0}
-
-
-async def educational_post_v2(ctx):
-    global _edu_v2_index
-    chat_id = ctx.job.chat_id
-    topic, base_prompt = EDUCATIONAL_TOPICS_V2[_edu_v2_index % len(EDUCATIONAL_TOPICS_V2)]
-    _edu_v2_index += 1
-    d = fetch_hrz_price()
-    price_ctx = f"Current $HRZ: ${float(d['price_usd']):.10f}" if d else ""
-    news = fetch_crypto_news(2)
-    news_ctx = "\n".join([f"- {n['title']}" for n in news]) if news else ""
-    full_prompt = (
-        f"Create a professional crypto educational Telegram post about: {base_prompt}\n\n"
-        f"Context: {price_ctx}\nRecent news: {news_ctx}\n\n"
-        f"Format: Start with 📚 <b>Title</b>, use emojis for sections, "
-        f"max 12 lines, HTML bold for key terms, "
-        f"end with 💡 <b>Pro Tip:</b> [actionable advice]. "
-        f"Be genuinely educational and engaging."
-    )
-    try:
-        url = "https://api.x.ai/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {XAI_KEY}", "Content-Type": "application/json"}
-        payload = {"model": "grok-3-latest",
-                   "messages": [{"role": "user", "content": full_prompt}],
-                   "max_tokens": 500, "temperature": 0.8}
-        r = requests.post(url, headers=headers, json=payload, timeout=20)
-        r.raise_for_status()
-        content = r.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print(f"[Edu post failed] {e}")
-        content = ask_gemini(full_prompt, max_tokens=400)
-    if not content:
-        return
-    try:
-        await ctx.bot.send_message(
-            chat_id=chat_id,
-            text=content,
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=True,
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("📊 $HRZ Chart", url=DEXSCREENER),
-                InlineKeyboardButton("💱 Buy HRZ",    url=PANCAKE_BUY),
-            ]])
-        )
-    except Exception as e:
-        logger.error(f"Edu post send error: {e}")
 
