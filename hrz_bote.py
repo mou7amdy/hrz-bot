@@ -2586,6 +2586,79 @@ def main():
     logger.info("🌊 HRZ Bot v8 — Ultimate Edition Starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
+async def cmd_clearmemory(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    clear_memory(update.effective_user.id)
+    await update.message.reply_text("🧹 Memory cleared! Fresh start. 🌊")
+
+async def cmd_mylevel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    level = detect_user_level(update.effective_user.id)
+    levels = {
+        "beginner":     "🌱 Beginner — Keep learning!",
+        "intermediate": "📈 Intermediate — Nice knowledge!",
+        "expert":       "🏆 Expert — You know your stuff!",
+    }
+    await update.message.reply_html(
+        f"🧠 <b>Your Crypto Level</b>\n\n{levels.get(level,'🌱 Beginner')}\n\n"
+        f"<i>Ask more crypto questions to level up! 🚀</i>"
+    )
+
+async def cmd_news(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    news = fetch_crypto_news(5)
+    if not news:
+        await update.message.reply_text("❌ News unavailable. Try again later.")
+        return
+    lines = ["📰 <b>Latest Crypto News</b>\n"]
+    for i, item in enumerate(news, 1):
+        lines.append(f"{i}. <a href='{item['url']}'>{item['title']}</a>\n   <i>— {item['source']}</i>")
+    await update.message.reply_html("\n".join(lines), disable_web_page_preview=True)
+
+async def cmd_marketing(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    member  = await ctx.bot.get_chat_member(chat_id, update.effective_user.id)
+    if member.status not in ("creator", "administrator"):
+        await update.message.reply_text("❌ Admin only.")
+        return
+    d = fetch_hrz_price()
+    price_ctx = f"${float(d['price_usd']):.10f} | 24h: {d['change_24h']}%" if d else ""
+    types = ["hype","trust","fomo","whale"]
+    post_type = (ctx.args[0] if ctx.args else None) or random.choice(types)
+    prompts = {
+        "hype":  f"Write a viral HYPE Telegram post for $HRZ. Use emotional language, create excitement. Data: {price_ctx}",
+        "trust": f"Write a TRUST-BUILDING post for $HRZ. Focus on: verified contract, locked liquidity, 0% buy tax. Data: {price_ctx}",
+        "fomo":  f"Write a FOMO post for $HRZ. Create urgency about early-stage opportunity. Data: {price_ctx}",
+        "whale": f"Write a WHALE PSYCHOLOGY post. Explain why smart money accumulates early. Reference $HRZ. Data: {price_ctx}",
+    }
+    prompt = (
+        prompts.get(post_type, prompts["hype"]) +
+        "\n\nStyle examples:\n"
+        "GOOD: '🌊 The Strait controls 20% of global oil... $HRZ controls your next 100x 👀'\n"
+        "GOOD: '✅ Verified 🔒 Locked 0% Buy Tax — You do the math 🧮'\n"
+        "Rules: Max 8 lines, HTML bold for numbers, end with #HRZ #Hormuz #BNBChain"
+    )
+    try:
+        url = "https://api.x.ai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {XAI_KEY}", "Content-Type": "application/json"}
+        payload = {"model": "grok-3-latest",
+                   "messages": [{"role": "user", "content": prompt}],
+                   "max_tokens": 300, "temperature": 0.95}
+        r = requests.post(url, headers=headers, json=payload, timeout=20)
+        r.raise_for_status()
+        post = r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        post = ask_gemini(prompt, max_tokens=250)
+    if not post:
+        await update.message.reply_text("❌ Could not generate post.")
+        return
+    await ctx.bot.send_message(
+        chat_id=chat_id,
+        text=post,
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("💱 Buy HRZ", url=PANCAKE_BUY),
+            InlineKeyboardButton("📊 Chart",   url=DEXSCREENER),
+        ]])
+    )
 if __name__ == "__main__":
     main()
 
@@ -2790,76 +2863,3 @@ async def educational_post_v2(ctx):
     except Exception as e:
         logger.error(f"Edu post send error: {e}")
 
-async def cmd_clearmemory(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    clear_memory(update.effective_user.id)
-    await update.message.reply_text("🧹 Memory cleared! Fresh start. 🌊")
-
-async def cmd_mylevel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    level = detect_user_level(update.effective_user.id)
-    levels = {
-        "beginner":     "🌱 Beginner — Keep learning!",
-        "intermediate": "📈 Intermediate — Nice knowledge!",
-        "expert":       "🏆 Expert — You know your stuff!",
-    }
-    await update.message.reply_html(
-        f"🧠 <b>Your Crypto Level</b>\n\n{levels.get(level,'🌱 Beginner')}\n\n"
-        f"<i>Ask more crypto questions to level up! 🚀</i>"
-    )
-
-async def cmd_news(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    news = fetch_crypto_news(5)
-    if not news:
-        await update.message.reply_text("❌ News unavailable. Try again later.")
-        return
-    lines = ["📰 <b>Latest Crypto News</b>\n"]
-    for i, item in enumerate(news, 1):
-        lines.append(f"{i}. <a href='{item['url']}'>{item['title']}</a>\n   <i>— {item['source']}</i>")
-    await update.message.reply_html("\n".join(lines), disable_web_page_preview=True)
-
-async def cmd_marketing(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    member  = await ctx.bot.get_chat_member(chat_id, update.effective_user.id)
-    if member.status not in ("creator", "administrator"):
-        await update.message.reply_text("❌ Admin only.")
-        return
-    d = fetch_hrz_price()
-    price_ctx = f"${float(d['price_usd']):.10f} | 24h: {d['change_24h']}%" if d else ""
-    types = ["hype","trust","fomo","whale"]
-    post_type = (ctx.args[0] if ctx.args else None) or random.choice(types)
-    prompts = {
-        "hype":  f"Write a viral HYPE Telegram post for $HRZ. Use emotional language, create excitement. Data: {price_ctx}",
-        "trust": f"Write a TRUST-BUILDING post for $HRZ. Focus on: verified contract, locked liquidity, 0% buy tax. Data: {price_ctx}",
-        "fomo":  f"Write a FOMO post for $HRZ. Create urgency about early-stage opportunity. Data: {price_ctx}",
-        "whale": f"Write a WHALE PSYCHOLOGY post. Explain why smart money accumulates early. Reference $HRZ. Data: {price_ctx}",
-    }
-    prompt = (
-        prompts.get(post_type, prompts["hype"]) +
-        "\n\nStyle examples:\n"
-        "GOOD: '🌊 The Strait controls 20% of global oil... $HRZ controls your next 100x 👀'\n"
-        "GOOD: '✅ Verified 🔒 Locked 0% Buy Tax — You do the math 🧮'\n"
-        "Rules: Max 8 lines, HTML bold for numbers, end with #HRZ #Hormuz #BNBChain"
-    )
-    try:
-        url = "https://api.x.ai/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {XAI_KEY}", "Content-Type": "application/json"}
-        payload = {"model": "grok-3-latest",
-                   "messages": [{"role": "user", "content": prompt}],
-                   "max_tokens": 300, "temperature": 0.95}
-        r = requests.post(url, headers=headers, json=payload, timeout=20)
-        r.raise_for_status()
-        post = r.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        post = ask_gemini(prompt, max_tokens=250)
-    if not post:
-        await update.message.reply_text("❌ Could not generate post.")
-        return
-    await ctx.bot.send_message(
-        chat_id=chat_id,
-        text=post,
-        parse_mode=ParseMode.HTML,
-        disable_web_page_preview=True,
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("💱 Buy HRZ", url=PANCAKE_BUY),
-            InlineKeyboardButton("📊 Chart",   url=DEXSCREENER),
-        ]])
-    )
