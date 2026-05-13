@@ -2709,6 +2709,125 @@ async def message_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ── MAIN
 # ════════════════════════════════════════════════════════════════════
 
+async def cmd_startairdrop(update, ctx):
+    global _airdrop_active, _airdrop_end, _airdrop_db
+    member = await ctx.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
+    if member.status not in ("creator", "administrator"):
+        return
+    _airdrop_active = True
+    _airdrop_end    = _dt.datetime.now() + _dt.timedelta(days=AIRDROP_DAYS)
+    _airdrop_db     = {}
+    await update.message.reply_html(
+        f"🎁 <b>HRZ Airdrop Started!</b>\n\n"
+        f"⏰ Ends: {_airdrop_end.strftime('%Y-%m-%d %H:%M')}\n"
+        f"👥 Max: {AIRDROP_MAX} participants\n\n"
+        f"Users can now join with /airdrop"
+    )
+
+async def cmd_airdrop(update, ctx):
+    global _airdrop_active, _airdrop_db
+    user    = update.effective_user
+    user_id = user.id
+
+    if not _airdrop_active:
+        await update.message.reply_text("❌ No active airdrop right now. Stay tuned! 🌊")
+        return
+
+    if _dt.datetime.now() > _airdrop_end:
+        _airdrop_active = False
+        await update.message.reply_text("❌ Airdrop has ended!")
+        return
+
+    if len(_airdrop_db) >= AIRDROP_MAX:
+        await update.message.reply_text("❌ Airdrop is full! 50/50 spots taken.")
+        return
+
+    if user_id in _airdrop_db:
+        await update.message.reply_text("✅ You are already registered!")
+        return
+
+    try:
+        member = await ctx.bot.get_chat_member(f"@{AIRDROP_CHANNEL}", user_id)
+        if member.status == "left":
+            await update.message.reply_html(
+                f"❌ You must join our channel first!\n\n"
+                f"👉 <a href='https://t.me/{AIRDROP_CHANNEL}'>Join HRZ Channel</a>\n\n"
+                f"Then send /airdrop again."
+            )
+            return
+    except Exception:
+        await update.message.reply_html(
+            f"❌ Please join our channel first!\n\n"
+            f"👉 <a href='https://t.me/{AIRDROP_CHANNEL}'>Join HRZ Channel</a>"
+        )
+        return
+
+    if not ctx.args:
+        await update.message.reply_html(
+            f"🎁 <b>HRZ Airdrop</b>\n\n"
+            f"👥 Spots: {len(_airdrop_db)}/{AIRDROP_MAX}\n"
+            f"⏰ Ends: {_airdrop_end.strftime('%Y-%m-%d %H:%M')}\n\n"
+            f"Send your BNB wallet address:\n"
+            f"<code>/airdrop 0xYourWalletAddress</code>"
+        )
+        return
+
+    wallet = ctx.args[0].strip()
+    if not wallet.startswith("0x") or len(wallet) != 42:
+        await update.message.reply_text("❌ Invalid BNB wallet address. Must start with 0x and be 42 characters.")
+        return
+
+    if any(v["wallet"] == wallet for v in _airdrop_db.values()):
+        await update.message.reply_text("❌ This wallet is already registered!")
+        return
+
+    _airdrop_db[user_id] = {
+        "username": user.username or user.first_name,
+        "wallet":   wallet,
+        "time":     _dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+
+    await update.message.reply_html(
+        f"✅ <b>Successfully Registered!</b>\n\n"
+        f"👤 User: @{user.username or user.first_name}\n"
+        f"💼 Wallet: <code>{wallet}</code>\n"
+        f"🎫 Spot: #{len(_airdrop_db)}/{AIRDROP_MAX}\n\n"
+        f"🌊 Good luck! Winners announced after {_airdrop_end.strftime('%Y-%m-%d')}"
+    )
+
+async def cmd_airdropstatus(update, ctx):
+    if not _airdrop_active:
+        await update.message.reply_text("No active airdrop.")
+        return
+    remaining = (_airdrop_end - _dt.datetime.now()).days
+    await update.message.reply_html(
+        f"📊 <b>Airdrop Status</b>\n\n"
+        f"👥 Registered: {len(_airdrop_db)}/{AIRDROP_MAX}\n"
+        f"⏰ Ends in: {remaining} days\n"
+        f"🟢 Status: Active"
+    )
+
+async def cmd_exportwinners(update, ctx):
+    member = await ctx.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
+    if member.status not in ("creator", "administrator"):
+        return
+    if not _airdrop_db:
+        await update.message.reply_text("No participants yet.")
+        return
+    lines = ["💼 Airdrop Participants — Copy for Multisender:\n"]
+    for uid, data in _airdrop_db.items():
+        lines.append(f"{data['wallet']}, 1000")
+    lines.append(f"\nTotal: {len(_airdrop_db)} wallets")
+    await update.message.reply_text("\n".join(lines))
+
+async def cmd_stopairdrop(update, ctx):
+    global _airdrop_active
+    member = await ctx.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
+    if member.status not in ("creator", "administrator"):
+        return
+    _airdrop_active = False
+    await update.message.reply_text(f"🛑 Airdrop stopped. {len(_airdrop_db)} participants registered.")
+
 def main():
     app = (
         Application.builder()
@@ -2988,123 +3107,4 @@ AIRDROP_DAYS      = 5
 _airdrop_db: dict = {}  # user_id -> {"username": "", "wallet": "", "time": ""}
 _airdrop_active   = False
 _airdrop_end      = None
-
-async def cmd_startairdrop(update, ctx):
-    global _airdrop_active, _airdrop_end, _airdrop_db
-    member = await ctx.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
-    if member.status not in ("creator", "administrator"):
-        return
-    _airdrop_active = True
-    _airdrop_end    = _dt.datetime.now() + _dt.timedelta(days=AIRDROP_DAYS)
-    _airdrop_db     = {}
-    await update.message.reply_html(
-        f"🎁 <b>HRZ Airdrop Started!</b>\n\n"
-        f"⏰ Ends: {_airdrop_end.strftime('%Y-%m-%d %H:%M')}\n"
-        f"👥 Max: {AIRDROP_MAX} participants\n\n"
-        f"Users can now join with /airdrop"
-    )
-
-async def cmd_airdrop(update, ctx):
-    global _airdrop_active, _airdrop_db
-    user    = update.effective_user
-    user_id = user.id
-
-    if not _airdrop_active:
-        await update.message.reply_text("❌ No active airdrop right now. Stay tuned! 🌊")
-        return
-
-    if _dt.datetime.now() > _airdrop_end:
-        _airdrop_active = False
-        await update.message.reply_text("❌ Airdrop has ended!")
-        return
-
-    if len(_airdrop_db) >= AIRDROP_MAX:
-        await update.message.reply_text("❌ Airdrop is full! 50/50 spots taken.")
-        return
-
-    if user_id in _airdrop_db:
-        await update.message.reply_text("✅ You are already registered!")
-        return
-
-    try:
-        member = await ctx.bot.get_chat_member(f"@{AIRDROP_CHANNEL}", user_id)
-        if member.status == "left":
-            await update.message.reply_html(
-                f"❌ You must join our channel first!\n\n"
-                f"👉 <a href='https://t.me/{AIRDROP_CHANNEL}'>Join HRZ Channel</a>\n\n"
-                f"Then send /airdrop again."
-            )
-            return
-    except Exception:
-        await update.message.reply_html(
-            f"❌ Please join our channel first!\n\n"
-            f"👉 <a href='https://t.me/{AIRDROP_CHANNEL}'>Join HRZ Channel</a>"
-        )
-        return
-
-    if not ctx.args:
-        await update.message.reply_html(
-            f"🎁 <b>HRZ Airdrop</b>\n\n"
-            f"👥 Spots: {len(_airdrop_db)}/{AIRDROP_MAX}\n"
-            f"⏰ Ends: {_airdrop_end.strftime('%Y-%m-%d %H:%M')}\n\n"
-            f"Send your BNB wallet address:\n"
-            f"<code>/airdrop 0xYourWalletAddress</code>"
-        )
-        return
-
-    wallet = ctx.args[0].strip()
-    if not wallet.startswith("0x") or len(wallet) != 42:
-        await update.message.reply_text("❌ Invalid BNB wallet address. Must start with 0x and be 42 characters.")
-        return
-
-    if any(v["wallet"] == wallet for v in _airdrop_db.values()):
-        await update.message.reply_text("❌ This wallet is already registered!")
-        return
-
-    _airdrop_db[user_id] = {
-        "username": user.username or user.first_name,
-        "wallet":   wallet,
-        "time":     _dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
-    }
-
-    await update.message.reply_html(
-        f"✅ <b>Successfully Registered!</b>\n\n"
-        f"👤 User: @{user.username or user.first_name}\n"
-        f"💼 Wallet: <code>{wallet}</code>\n"
-        f"🎫 Spot: #{len(_airdrop_db)}/{AIRDROP_MAX}\n\n"
-        f"🌊 Good luck! Winners announced after {_airdrop_end.strftime('%Y-%m-%d')}"
-    )
-
-async def cmd_airdropstatus(update, ctx):
-    if not _airdrop_active:
-        await update.message.reply_text("No active airdrop.")
-        return
-    remaining = (_airdrop_end - _dt.datetime.now()).days
-    await update.message.reply_html(
-        f"📊 <b>Airdrop Status</b>\n\n"
-        f"👥 Registered: {len(_airdrop_db)}/{AIRDROP_MAX}\n"
-        f"⏰ Ends in: {remaining} days\n"
-        f"🟢 Status: Active"
-    )
-
-async def cmd_exportwinners(update, ctx):
-    member = await ctx.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
-    if member.status not in ("creator", "administrator"):
-        return
-    if not _airdrop_db:
-        await update.message.reply_text("No participants yet.")
-        return
-    lines = ["💼 Airdrop Participants — Copy for Multisender:\n"]
-    for uid, data in _airdrop_db.items():
-        lines.append(f"{data['wallet']}, 1000")
-    lines.append(f"\nTotal: {len(_airdrop_db)} wallets")
-    await update.message.reply_text("\n".join(lines))
-
-async def cmd_stopairdrop(update, ctx):
-    global _airdrop_active
-    member = await ctx.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
-    if member.status not in ("creator", "administrator"):
-        return
-    _airdrop_active = False
-    await update.message.reply_text(f"🛑 Airdrop stopped. {len(_airdrop_db)} participants registered.")
 
