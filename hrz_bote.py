@@ -2883,6 +2883,112 @@ _airdrop_db: dict = {}  # user_id -> {"username": "", "wallet": "", "time": ""}
 _airdrop_active   = False
 _airdrop_end      = None
 
+if __name__ == "__main__":
+    main()
+
+# ══════════════════════════════════════════════════════
+# ── INTELLIGENCE MODULE
+# ══════════════════════════════════════════════════════
+
+from collections import defaultdict as _dd
+import random as _random
+import time as _time
+
+_chat_memory: dict = _dd(list)
+_user_profile: dict = _dd(dict)
+MAX_MEMORY = 10
+
+def add_to_memory(user_id, role, content):
+    _chat_memory[user_id].append({"role": role, "content": content})
+    if len(_chat_memory[user_id]) > MAX_MEMORY:
+        _chat_memory[user_id] = _chat_memory[user_id][-MAX_MEMORY:]
+
+def get_memory(user_id):
+    return _chat_memory[user_id]
+
+def clear_memory(user_id):
+    _chat_memory[user_id] = []
+
+def detect_user_level(user_id):
+    history = _chat_memory[user_id]
+    if not history:
+        return "beginner"
+    text = " ".join([m["content"] for m in history]).lower()
+    expert_words = ["rsi","macd","fibonacci","bollinger","impermanent loss","on-chain","order book","arbitrage"]
+    mid_words = ["chart","candle","pump","dump","hodl","dca","volume","trend","bullish","bearish"]
+    if sum(1 for w in expert_words if w in text) >= 2:
+        return "expert"
+    elif sum(1 for w in mid_words if w in text) >= 2:
+        return "intermediate"
+    return "beginner"
+
+INTENT_PATTERNS = {
+    "price_check":       ["price","how much","worth","value","سعر","كم"],
+    "buy_guide":         ["how to buy","where to buy","purchase","كيف أشتري","شراء"],
+    "technical_analysis":["chart","candle","rsi","macd","support","resistance","شموع","تحليل"],
+    "education":         ["explain","what is","how does","teach","شرح","ما هو","كيف يعمل"],
+    "fud_response":      ["scam","rug","fake","safe","trust","احتيال","آمن"],
+    "price_prediction":  ["prediction","will it","moon","target","توقع","سيصل"],
+    "comparison":        ["vs","compare","better than","مقارنة","أفضل من"],
+    "buy_guide":         ["how to buy","purchase","كيف أشتري"],
+    "tokenomics":        ["supply","tax","liquidity","locked","توكينوميكس"],
+}
+
+def detect_intent(text):
+    text_lower = text.lower()
+    scores = {}
+    for intent, keywords in INTENT_PATTERNS.items():
+        score = sum(1 for kw in keywords if kw in text_lower)
+        if score > 0:
+            scores[intent] = score
+    return max(scores, key=scores.get) if scores else "general"
+
+def build_system_prompt(intent, user_level, price_data=None):
+    hrz_facts = (
+        "You are the Official AI for Hormuz (HRZ) on BNB Chain. "
+        "Contract: 0x4E788d423d90A15504455b4FF746B9C1D9951A82 | "
+        "Supply: 1B | Buy Tax: 0% | Sell Tax: 3% | Liquidity: Locked 1yr | "
+        "DEX: PancakeSwap V2 | Inspired by Strait of Hormuz (controls 20% global oil). "
+    )
+    live = ""
+    if price_data:
+        live = (f"Live: ${float(price_data.get('price_usd',0)):.10f} | "
+                f"24h: {price_data.get('change_24h',0)}% | "
+                f"Vol: ${float(price_data.get('volume_24h',0)):,.2f} | "
+                f"Liq: ${float(price_data.get('liquidity',0)):,.2f}. ")
+    level_map = {
+        "beginner":     "Explain simply, use analogies, avoid jargon. ",
+        "intermediate": "Use standard terms, give practical advice. ",
+        "expert":       "Use advanced terminology, be concise and data-driven. ",
+    }
+    intent_map = {
+        "price_check":        "Present price clearly, analyze 24h change, give market sentiment, end with buy link. ",
+        "technical_analysis": "Analyze trend, support/resistance, volume, give actionable insight, add DYOR. ",
+        "education":          "Teach clearly with real-world analogy, step by step, practical example with $HRZ. ",
+        "fud_response":       "Acknowledge concern, counter with verified facts (contract/lock/tax), stay professional. ",
+        "price_prediction":   "Start with DYOR, analyze fundamentals, give bull/bear scenarios, never promise profits. ",
+        "tokenomics":         "Explain HRZ tokenomics clearly: 1B supply, 0% buy, 3% sell, locked liq, verified. ",
+        "general":            "Be helpful, enthusiastic, professional. Max 4 sentences. ",
+    }
+    return (hrz_facts + live +
+            level_map.get(user_level, level_map["beginner"]) +
+            intent_map.get(intent, intent_map["general"]) +
+            "Respond in English only. Use HTML bold for numbers. End with emoji. ")
+
+
+# ══════════════════════════════════════════════════════
+# ── AIRDROP SYSTEM
+# ══════════════════════════════════════════════════════
+
+import datetime as _dt
+
+AIRDROP_CHANNEL   = "HormuzHRZ"
+AIRDROP_MAX       = 50
+AIRDROP_DAYS      = 5
+_airdrop_db: dict = {}  # user_id -> {"username": "", "wallet": "", "time": ""}
+_airdrop_active   = False
+_airdrop_end      = None
+
 async def cmd_startairdrop(update, ctx):
     global _airdrop_active, _airdrop_end, _airdrop_db
     member = await ctx.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
