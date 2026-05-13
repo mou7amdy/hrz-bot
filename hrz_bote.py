@@ -2709,6 +2709,16 @@ async def message_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ── MAIN
 # ════════════════════════════════════════════════════════════════════
 
+
+# ── AIRDROP CONFIG
+import datetime as _dt
+AIRDROP_CHANNEL   = "HormuzHRZ"
+AIRDROP_MAX       = 50
+AIRDROP_DAYS      = 5
+_airdrop_db       = {}
+_airdrop_active   = False
+_airdrop_end      = None
+
 async def cmd_startairdrop(update, ctx):
     global _airdrop_active, _airdrop_end, _airdrop_db
     member = await ctx.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
